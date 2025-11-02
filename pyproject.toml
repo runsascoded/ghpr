@@ -28,6 +28,11 @@ dependencies = [
     "utz>=0.1.0",
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+]
+
 [project.urls]
 Repository = "https://github.com/runsascoded/ghpr"
 Issues = "https://github.com/runsascoded/ghpr/issues"
