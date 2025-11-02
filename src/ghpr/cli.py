@@ -854,13 +854,77 @@ def push(
 
     # Update the PR/Issue
     if dry_run:
-        err(f"[DRY-RUN] Would update {item_label} {owner}/{repo}#{pr_number}")
-        err(f"  Title: {title}")
-        err(f"  Body ({len(body)} chars):")
-        # Show first few lines of body
-        body_preview = body[:500] + ('...' if len(body) > 500 else '')
-        for line in body_preview.split('\n'):
-            err(f"    {line}")
+        # Determine if we should use color
+        use_color = sys.stderr.isatty()
+
+        # Import difflib for comparison
+        import difflib
+
+        # ANSI color codes
+        RED = '\033[31m' if use_color else ''
+        GREEN = '\033[32m' if use_color else ''
+        CYAN = '\033[36m' if use_color else ''
+        YELLOW = '\033[33m' if use_color else ''
+        RESET_COLOR = '\033[0m' if use_color else ''
+        BOLD = '\033[1m' if use_color else ''
+
+        # Show diff instead of preview
+        err(f"\n{BOLD}=== Preview of changes (dry-run) ==={RESET_COLOR}\n")
+
+        # Get remote data for comparison
+        pr_data, _ = get_item_metadata(owner, repo, pr_number, item_type)
+        if pr_data:
+            remote_title = pr_data['title']
+            remote_body = (pr_data['body'] or '').rstrip()
+
+            # Strip footers for comparison
+            from ghpr.gist import extract_gist_footer
+            local_body_without_footer, _ = extract_gist_footer(body)
+            remote_body_without_footer, _ = extract_gist_footer(remote_body)
+
+            # Compare titles
+            if title != remote_title:
+                err(f"{BOLD}{YELLOW}=== Title Changes ==={RESET_COLOR}")
+                err(f"{RED}Remote:{RESET_COLOR} {remote_title}")
+                err(f"{GREEN}Local: {RESET_COLOR} {title}\n")
+            else:
+                err(f"{BOLD}{CYAN}=== Title: No changes ==={RESET_COLOR}\n")
+
+            # Compare bodies
+            if local_body_without_footer != remote_body_without_footer:
+                err(f"{BOLD}{YELLOW}=== Body Changes ==={RESET_COLOR}")
+
+                local_lines = local_body_without_footer.splitlines(keepends=True)
+                remote_lines = remote_body_without_footer.splitlines(keepends=True)
+
+                diff_lines = difflib.unified_diff(
+                    remote_lines,
+                    local_lines,
+                    fromfile='Remote',
+                    tofile='Local (will be pushed)',
+                    lineterm=''
+                )
+
+                for line in diff_lines:
+                    if line.startswith('+++'):
+                        err(f"{BOLD}{line.rstrip()}{RESET_COLOR}")
+                    elif line.startswith('---'):
+                        err(f"{BOLD}{line.rstrip()}{RESET_COLOR}")
+                    elif line.startswith('@@'):
+                        err(f"{CYAN}{line.rstrip()}{RESET_COLOR}")
+                    elif line.startswith('+'):
+                        err(f"{GREEN}{line.rstrip()}{RESET_COLOR}")
+                    elif line.startswith('-'):
+                        err(f"{RED}{line.rstrip()}{RESET_COLOR}")
+                    else:
+                        err(line.rstrip())
+                err("")  # blank line
+            else:
+                err(f"{BOLD}{CYAN}=== Body: No changes ==={RESET_COLOR}\n")
+        else:
+            err(f"[DRY-RUN] Would update {item_label} {owner}/{repo}#{pr_number}")
+            err(f"  Title: {title}")
+            err(f"  Body: {len(body)} chars")
     else:
         err(f"Updating {item_label} {owner}/{repo}#{pr_number}...")
 
@@ -932,12 +996,6 @@ def push(
                     err(f"Warning: Skipping {comment_file_path} - no author metadata")
                     continue
 
-                # Check if we own this comment
-                if author != current_user and not force_others:
-                    err(f"Skipping {comment_file_path} (author: {author}, not you). Use --force-others to try anyway.")
-                    comments_skipped += 1
-                    continue
-
                 # Check if this is a new comment or an edit
                 if comment_id in remote_comment_ids:
                     # Editing existing comment
@@ -949,8 +1007,40 @@ def push(
                         comments_skipped += 1
                         continue
 
+                    # Check if we own this comment (only matters if there are changes)
+                    if author != current_user and not force_others:
+                        err(f"Skipping {comment_file_path} (author: {author}, not you). Use --force-others to try anyway.")
+                        comments_skipped += 1
+                        continue
+
                     if dry_run:
-                        err(f"[DRY-RUN] Would update comment {comment_id}")
+                        # Show diff for this comment
+                        err(f"\n{BOLD}{YELLOW}=== Comment {comment_id} (by {author}) - Changes ==={RESET_COLOR}")
+                        local_lines = body.splitlines(keepends=True)
+                        remote_lines = remote_body.splitlines(keepends=True)
+
+                        diff_lines = difflib.unified_diff(
+                            remote_lines,
+                            local_lines,
+                            fromfile=f'Remote comment {comment_id}',
+                            tofile=f'Local {comment_file_path} (will be pushed)',
+                            lineterm=''
+                        )
+
+                        for line in diff_lines:
+                            if line.startswith('+++'):
+                                err(f"{BOLD}{line.rstrip()}{RESET_COLOR}")
+                            elif line.startswith('---'):
+                                err(f"{BOLD}{line.rstrip()}{RESET_COLOR}")
+                            elif line.startswith('@@'):
+                                err(f"{CYAN}{line.rstrip()}{RESET_COLOR}")
+                            elif line.startswith('+'):
+                                err(f"{GREEN}{line.rstrip()}{RESET_COLOR}")
+                            elif line.startswith('-'):
+                                err(f"{RED}{line.rstrip()}{RESET_COLOR}")
+                            else:
+                                err(line.rstrip())
+                        err("")  # blank line
                     else:
                         # Update existing comment
                         try:
