@@ -5,7 +5,7 @@ from os import chdir
 
 from utz import proc, err
 
-from .patterns import GITHUB_URL_PATTERN, PR_DIR_PATTERN, PR_INLINE_LINK_PATTERN
+from .patterns import GITHUB_URL_PATTERN, PR_DIR_PATTERN, GH_DIR_PATTERN, PR_INLINE_LINK_PATTERN
 
 
 def get_pr_info_from_path(path: Path | None = None) -> tuple[str | None, str | None, str | None]:
@@ -22,18 +22,27 @@ def get_pr_info_from_path(path: Path | None = None) -> tuple[str | None, str | N
     if owner and repo and pr_number:
         return owner, repo, pr_number
 
-    # Look for pr<number> pattern in current or parent directories
+    # Look for patterns in current or parent directories
+    # Supports: pr<number>, issue<number>, gh<number> (legacy), or gh/<number> (new)
     current = path
     pr_number = None
     repo_path = None
 
     while current != current.parent:
-        # Check if this dir matches pr<number>
+        # Check if this dir matches pr<number>, issue<number>, or gh<number>
         match = PR_DIR_PATTERN.match(current.name)
         if match:
             pr_number = match.group(1)
             repo_path = current.parent
             break
+
+        # Check for new gh/{number} structure
+        if current.parent.name == 'gh' or GH_DIR_PATTERN.match(current.parent.name):
+            if current.name.isdigit():
+                pr_number = current.name
+                repo_path = current.parent.parent
+                break
+
         current = current.parent
 
     if not pr_number:
@@ -48,7 +57,7 @@ def get_pr_info_from_path(path: Path | None = None) -> tuple[str | None, str | N
                     return match.group(1), match.group(2), match.group(3)
 
         err("Error: Could not determine PR number from directory structure")
-        err("Expected to be in a directory named 'pr<number>' or have DESCRIPTION.md with PR metadata")
+        err("Expected to be in a directory named 'gh/{number}', 'pr<number>', 'issue<number>', or have DESCRIPTION.md with PR metadata")
         return None, None, None
 
     # Get repo info from parent directory

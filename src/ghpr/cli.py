@@ -44,6 +44,7 @@ from .patterns import (
     PR_SPEC_PATTERN,
     PR_FILENAME_PATTERN,
     PR_DIR_PATTERN,
+    GH_DIR_PATTERN,
     GIST_ID_PATTERN,
     GIST_URL_WITH_USER_PATTERN,
 )
@@ -490,7 +491,7 @@ def open_pr(
 
 
 @cli.command()
-@opt('-d', '--directory', help='Directory to clone into (default: pr{number} or issue{number})')
+@opt('-d', '--directory', help='Directory to clone into (default: gh/{number})')
 @flag('-G', '--no-gist', help='Skip creating a gist')
 @flag('--no-comments', help='Skip cloning comments')
 @arg('spec', required=False)
@@ -540,10 +541,9 @@ def clone(
     if not item_data:
         exit(1)
 
-    # Use detected type for directory naming if not specified
+    # Use gh/{number} naming (PRs are issues, so same pattern for both)
     if not directory:
-        prefix = 'issue' if detected_type == 'issue' else 'pr'
-        directory = f'{prefix}{number}'
+        directory = f'gh/{number}'
 
     target_path = Path(directory)
 

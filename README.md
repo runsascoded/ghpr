@@ -37,13 +37,15 @@ ghpr comment my-draft.md
 
 ## Directory Structure
 
-Cloned issues are stored as:
+Cloned PRs and issues are stored as:
 ```
 gh/123/
   owner-repo#123.md       # Main description
   z3404494861-user.md     # Comments (ID-author format)
   z3407382913-user.md
 ```
+
+Since PRs are issues in GitHub's API, we use the same `gh/{number}/` pattern for both.
 
 ## Shell Integration (Optional)
 

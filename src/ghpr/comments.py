@@ -4,12 +4,12 @@ from pathlib import Path
 
 
 def write_comment_file(comment_id: str, author: str, created_at: str, updated_at: str | None, body: str) -> Path:
-    """Write a comment to a z{comment_id}.md file.
+    """Write a comment to a z{comment_id}-{author}.md file.
 
     Returns:
         Path to the created file
     """
-    filename = f'z{comment_id}.md'
+    filename = f'z{comment_id}-{author}.md'
     filepath = Path(filename)
 
     content_lines = [
@@ -59,7 +59,13 @@ def read_comment_file(filepath: Path) -> tuple[str | None, str | None, str | Non
 
 
 def get_comment_id_from_filename(filename: str) -> str | None:
-    """Extract comment ID from z{id}.md filename."""
+    """Extract comment ID from z{id}-{author}.md or z{id}.md (legacy) filename."""
     if filename.startswith('z') and filename.endswith('.md'):
-        return filename[1:-3]  # Remove 'z' prefix and '.md' suffix
+        # Remove 'z' prefix and '.md' suffix
+        middle = filename[1:-3]
+        # Handle new format: z{id}-{author}.md
+        if '-' in middle:
+            return middle.split('-')[0]
+        # Handle legacy format: z{id}.md
+        return middle
     return None
