@@ -11,9 +11,10 @@ def get_item_metadata(owner: str, repo: str, number: str, item_type: str | None 
     """
     # Try to detect type if not specified
     if not item_type:
-        # Try PR first
+        # Try PR first (use err_ok to suppress GraphQL errors for issues)
         try:
-            data = proc.json('gh', 'pr', 'view', number, '-R', f'{owner}/{repo}', '--json', 'title,body,number,url', log=None)
+            from subprocess import DEVNULL
+            data = proc.json('gh', 'pr', 'view', number, '-R', f'{owner}/{repo}', '--json', 'title,body,number,url', log=False, stderr=DEVNULL)
             # Normalize line endings from GitHub (convert \r\n to \n)
             if data.get('body'):
                 data['body'] = data['body'].replace('\r\n', '\n')
@@ -21,7 +22,7 @@ def get_item_metadata(owner: str, repo: str, number: str, item_type: str | None 
         except Exception:
             # Try issue
             try:
-                data = proc.json('gh', 'issue', 'view', number, '-R', f'{owner}/{repo}', '--json', 'title,body,number,url', log=None)
+                data = proc.json('gh', 'issue', 'view', number, '-R', f'{owner}/{repo}', '--json', 'title,body,number,url', log=False)
                 if data.get('body'):
                     data['body'] = data['body'].replace('\r\n', '\n')
                 return data, 'issue'
@@ -32,7 +33,7 @@ def get_item_metadata(owner: str, repo: str, number: str, item_type: str | None 
     # Use specified type
     cmd = 'pr' if item_type == 'pr' else 'issue'
     try:
-        data = proc.json('gh', cmd, 'view', number, '-R', f'{owner}/{repo}', '--json', 'title,body,number,url', log=None)
+        data = proc.json('gh', cmd, 'view', number, '-R', f'{owner}/{repo}', '--json', 'title,body,number,url', log=False)
         # Normalize line endings from GitHub (convert \r\n to \n)
         if data.get('body'):
             data['body'] = data['body'].replace('\r\n', '\n')
@@ -51,7 +52,7 @@ def get_pr_metadata(owner: str, repo: str, pr_number: str) -> dict | None:
 def get_current_github_user() -> str | None:
     """Get the currently authenticated GitHub user."""
     try:
-        user = proc.line('gh', 'api', 'user', '--jq', '.login', log=None)
+        user = proc.line('gh', 'api', 'user', '--jq', '.login', log=False)
         return user
     except Exception as e:
         err(f"Warning: Could not get current GitHub user: {e}")
@@ -66,9 +67,9 @@ def get_item_comments(owner: str, repo: str, number: str, item_type: str) -> lis
     """
     try:
         if item_type == 'pr':
-            comments = proc.json('gh', 'api', f'repos/{owner}/{repo}/issues/{number}/comments', log=None)
+            comments = proc.json('gh', 'api', f'repos/{owner}/{repo}/issues/{number}/comments', log=False)
         else:
-            comments = proc.json('gh', 'api', f'repos/{owner}/{repo}/issues/{number}/comments', log=None)
+            comments = proc.json('gh', 'api', f'repos/{owner}/{repo}/issues/{number}/comments', log=False)
 
         # Normalize line endings in comment bodies
         for comment in comments:

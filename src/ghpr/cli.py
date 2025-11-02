@@ -1607,8 +1607,14 @@ def pull(
 def comment(file: str | None) -> None:
     """Add a new comment to the current PR/Issue from a draft file.
 
-    If FILE is not specified, will look for exactly one uncommitted .md file
-    that is not a description or comment file.
+    If FILE is not specified, will auto-detect exactly one new*.md file.
+
+    When auto-detecting (no FILE specified):
+    - Only considers files matching new*.md pattern (e.g., new.md, new-2.md)
+    - Errors if multiple new*.md files exist (use explicit path to choose)
+
+    When FILE is specified explicitly:
+    - Any .md file path is allowed
 
     Workflow:
     1. Find or validate the draft file
@@ -1630,33 +1636,22 @@ def comment(file: str | None) -> None:
 
     # Find draft file
     if file:
+        # Explicit path: any .md file is allowed
         draft_path = Path(file)
         if not draft_path.exists():
             err(f"Error: File not found: {file}")
             exit(1)
     else:
-        # Auto-detect: find uncommitted .md files that aren't description/comments
-        desc_file = find_description_file()
-        desc_name = desc_file.name if desc_file else None
-
-        # Get all .md files
-        md_files = list(Path.cwd().glob('*.md'))
-
-        # Filter out description and comment files
-        candidates = []
-        for f in md_files:
-            if f.name == desc_name:
-                continue  # Skip description file
-            if f.name.startswith('z') and get_comment_id_from_filename(f.name):
-                continue  # Skip comment files
-            candidates.append(f)
+        # Auto-detect: only consider new*.md files
+        candidates = list(Path.cwd().glob('new*.md'))
 
         if len(candidates) == 0:
             err("Error: No draft file found")
-            err("Create a .md file with your comment, or specify the file path explicitly")
+            err("Create a new*.md file with your comment (e.g., new.md, new-followup.md)")
+            err("Or specify the file path explicitly: ghpr comment <file>")
             exit(1)
         elif len(candidates) > 1:
-            err("Error: Multiple potential draft files found:")
+            err("Error: Multiple draft files found:")
             for c in candidates:
                 err(f"  - {c.name}")
             err("Please specify which file to use: ghpr comment <file>")
