@@ -20,5 +20,3 @@ alias ghprpF='ghpr push -F'            # push WITHOUT footer
 alias ghprd='ghpr diff'                # diff local vs remote PR
 alias ghpria='ghpr ingest-attachments' # ingest user-attachments from PR
 alias ghpru='ghpr upload'              # upload images to PR's gist
-alias ghprs='ghpr sync'                # sync/update PR clones to new naming
-alias ghprsn='ghpr sync -n'            # dry-run sync
