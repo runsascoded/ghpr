@@ -29,8 +29,8 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/ryan-williams/git-helpers"
-Issues = "https://github.com/ryan-williams/git-helpers/issues"
+Repository = "https://github.com/runsascoded/ghpr"
+Issues = "https://github.com/runsascoded/ghpr/issues"
 
 [project.scripts]
 ghpr = "ghpr.cli:cli"

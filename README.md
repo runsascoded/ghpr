@@ -1,4 +1,4 @@
-# ghpr-py
+# ghpr
 
 GitHub PR/Issue management tool for local iteration with gist mirroring.
 
@@ -45,6 +45,48 @@ gh/123/
   z3407382913-user.md
 ```
 
+## Shell Integration (Optional)
+
+For power users who want shorter aliases, `ghpr` provides shell integration:
+
+### Bash/Zsh
+
+Add to your `~/.bashrc` or `~/.zshrc`:
+
+```bash
+eval "$(ghpr shell-integration bash)"
+```
+
+### Fish
+
+Add to your `~/.config/fish/config.fish`:
+
+```fish
+ghpr shell-integration fish | source
+```
+
+### Available Aliases
+
+After enabling shell integration, you get convenient shortcuts:
+
+```bash
+ghpri      # ghpr init
+ghpro      # ghpr open
+ghprog     # ghpr open -g
+ghprcr     # ghpr create
+ghprsh     # ghpr show
+ghprc      # ghpr clone
+ghprp      # ghpr push
+ghprl      # ghpr pull
+ghprd      # ghpr diff
+# ... and more
+```
+
+See the full list with:
+```bash
+ghpr shell-integration bash
+```
+
 ## Development
 
-Part of [git-helpers](https://github.com/ryan-williams/git-helpers).
+Repository: [runsascoded/ghpr](https://github.com/runsascoded/ghpr)
