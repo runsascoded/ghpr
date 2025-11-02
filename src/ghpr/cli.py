@@ -49,6 +49,61 @@ from .patterns import (
     GIST_URL_WITH_USER_PATTERN,
 )
 
+
+def render_unified_diff(
+    remote_content: str,
+    local_content: str,
+    fromfile: str,
+    tofile: str,
+    use_color: bool = True,
+    log=None,
+) -> None:
+    """Render a colored unified diff.
+
+    Args:
+        remote_content: Remote content to compare
+        local_content: Local content to compare
+        fromfile: Label for remote content
+        tofile: Label for local content
+        use_color: Whether to use ANSI color codes
+        log: Function to use for output (default: err for stderr)
+    """
+    if log is None:
+        log = err
+
+    # ANSI color codes
+    RED = '\033[31m' if use_color else ''
+    GREEN = '\033[32m' if use_color else ''
+    CYAN = '\033[36m' if use_color else ''
+    BOLD = '\033[1m' if use_color else ''
+    RESET = '\033[0m' if use_color else ''
+
+    local_lines = local_content.splitlines(keepends=True)
+    remote_lines = remote_content.splitlines(keepends=True)
+
+    diff_lines = difflib.unified_diff(
+        remote_lines,
+        local_lines,
+        fromfile=fromfile,
+        tofile=tofile,
+        lineterm=''
+    )
+
+    for line in diff_lines:
+        if line.startswith('+++'):
+            log(f"{BOLD}{line.rstrip()}{RESET}")
+        elif line.startswith('---'):
+            log(f"{BOLD}{line.rstrip()}{RESET}")
+        elif line.startswith('@@'):
+            log(f"{CYAN}{line.rstrip()}{RESET}")
+        elif line.startswith('+'):
+            log(f"{GREEN}{line.rstrip()}{RESET}")
+        elif line.startswith('-'):
+            log(f"{RED}{line.rstrip()}{RESET}")
+        else:
+            log(line.rstrip())
+
+
 # Try to import git_helpers, but it's OK if not available
 try:
     from git_helpers.util.branch_resolution import resolve_remote_ref
@@ -893,31 +948,13 @@ def push(
             # Compare bodies
             if local_body_without_footer != remote_body_without_footer:
                 err(f"{BOLD}{YELLOW}=== Body Changes ==={RESET_COLOR}")
-
-                local_lines = local_body_without_footer.splitlines(keepends=True)
-                remote_lines = remote_body_without_footer.splitlines(keepends=True)
-
-                diff_lines = difflib.unified_diff(
-                    remote_lines,
-                    local_lines,
+                render_unified_diff(
+                    remote_body_without_footer,
+                    local_body_without_footer,
                     fromfile='Remote',
                     tofile='Local (will be pushed)',
-                    lineterm=''
+                    use_color=use_color
                 )
-
-                for line in diff_lines:
-                    if line.startswith('+++'):
-                        err(f"{BOLD}{line.rstrip()}{RESET_COLOR}")
-                    elif line.startswith('---'):
-                        err(f"{BOLD}{line.rstrip()}{RESET_COLOR}")
-                    elif line.startswith('@@'):
-                        err(f"{CYAN}{line.rstrip()}{RESET_COLOR}")
-                    elif line.startswith('+'):
-                        err(f"{GREEN}{line.rstrip()}{RESET_COLOR}")
-                    elif line.startswith('-'):
-                        err(f"{RED}{line.rstrip()}{RESET_COLOR}")
-                    else:
-                        err(line.rstrip())
                 err("")  # blank line
             else:
                 err(f"{BOLD}{CYAN}=== Body: No changes ==={RESET_COLOR}\n")
@@ -1016,30 +1053,13 @@ def push(
                     if dry_run:
                         # Show diff for this comment
                         err(f"\n{BOLD}{YELLOW}=== Comment {comment_id} (by {author}) - Changes ==={RESET_COLOR}")
-                        local_lines = body.splitlines(keepends=True)
-                        remote_lines = remote_body.splitlines(keepends=True)
-
-                        diff_lines = difflib.unified_diff(
-                            remote_lines,
-                            local_lines,
+                        render_unified_diff(
+                            remote_body,
+                            body,
                             fromfile=f'Remote comment {comment_id}',
                             tofile=f'Local {comment_file_path} (will be pushed)',
-                            lineterm=''
+                            use_color=use_color
                         )
-
-                        for line in diff_lines:
-                            if line.startswith('+++'):
-                                err(f"{BOLD}{line.rstrip()}{RESET_COLOR}")
-                            elif line.startswith('---'):
-                                err(f"{BOLD}{line.rstrip()}{RESET_COLOR}")
-                            elif line.startswith('@@'):
-                                err(f"{CYAN}{line.rstrip()}{RESET_COLOR}")
-                            elif line.startswith('+'):
-                                err(f"{GREEN}{line.rstrip()}{RESET_COLOR}")
-                            elif line.startswith('-'):
-                                err(f"{RED}{line.rstrip()}{RESET_COLOR}")
-                            else:
-                                err(line.rstrip())
                         err("")  # blank line
                     else:
                         # Update existing comment
@@ -1465,33 +1485,14 @@ def diff(
     # Compare bodies (without footers)
     if local_body_without_footer != remote_body_without_footer:
         err(f"\n{BOLD}{YELLOW}=== Body Differences ==={RESET}")
-
-        # Generate a unified diff
-        local_lines = local_body_without_footer.splitlines(keepends=True)
-        remote_lines = remote_body_without_footer.splitlines(keepends=True)
-
-        diff_lines = difflib.unified_diff(
-            remote_lines,
-            local_lines,
+        render_unified_diff(
+            remote_body_without_footer,
+            local_body_without_footer,
             fromfile='Remote PR',
             tofile=f'Local {desc_file.name}',
-            lineterm=''
+            use_color=use_color,
+            log=print
         )
-
-        # Color the diff output
-        for line in diff_lines:
-            if line.startswith('+++'):
-                print(f"{BOLD}{line.rstrip()}{RESET}")
-            elif line.startswith('---'):
-                print(f"{BOLD}{line.rstrip()}{RESET}")
-            elif line.startswith('@@'):
-                print(f"{CYAN}{line.rstrip()}{RESET}")
-            elif line.startswith('+'):
-                print(f"{GREEN}{line.rstrip()}{RESET}")
-            elif line.startswith('-'):
-                print(f"{RED}{line.rstrip()}{RESET}")
-            else:
-                print(line.rstrip())
     else:
         err(f"\n{BOLD}{CYAN}=== Body: No differences ==={RESET}")
 
@@ -1530,30 +1531,14 @@ def diff(
 
                     if local_body != remote_body:
                         err(f"\n{BOLD}{YELLOW}=== Comment {comment_id} (by {author}) - Differences ==={RESET}")
-                        local_lines = local_body.splitlines(keepends=True)
-                        remote_lines = remote_body.splitlines(keepends=True)
-
-                        diff_lines = difflib.unified_diff(
-                            remote_lines,
-                            local_lines,
+                        render_unified_diff(
+                            remote_body,
+                            local_body,
                             fromfile=f'Remote comment {comment_id}',
                             tofile=f'Local {comment_file_path}',
-                            lineterm=''
+                            use_color=use_color,
+                            log=print
                         )
-
-                        for line in diff_lines:
-                            if line.startswith('+++'):
-                                print(f"{BOLD}{line.rstrip()}{RESET}")
-                            elif line.startswith('---'):
-                                print(f"{BOLD}{line.rstrip()}{RESET}")
-                            elif line.startswith('@@'):
-                                print(f"{CYAN}{line.rstrip()}{RESET}")
-                            elif line.startswith('+'):
-                                print(f"{GREEN}{line.rstrip()}{RESET}")
-                            elif line.startswith('-'):
-                                print(f"{RED}{line.rstrip()}{RESET}")
-                            else:
-                                print(line.rstrip())
                     else:
                         err(f"{CYAN}Comment {comment_id} (by {author}): No differences{RESET}")
                 else:
