@@ -1602,6 +1602,134 @@ def pull(
     push.callback(gist, dry_run, footer_count, no_footer=False, open_browser=open_browser, images=False, gist_private=gist_private, no_comments=no_comments, force_others=False)
 
 
+@cli.command()
+@arg('file', required=False)
+def comment(file: str | None) -> None:
+    """Add a new comment to the current PR/Issue from a draft file.
+
+    If FILE is not specified, will look for exactly one uncommitted .md file
+    that is not a description or comment file.
+
+    Workflow:
+    1. Find or validate the draft file
+    2. Post it as a comment to GitHub
+    3. Fetch the comment back to get its ID
+    4. Rename draft to z{comment_id}-{author}.md
+    5. Commit and push to gist (if exists)
+    """
+    # Get PR/Issue info
+    owner, repo, number = get_pr_info_from_path()
+    if not all([owner, repo, number]):
+        err("Error: Could not determine PR/Issue from current directory")
+        exit(1)
+
+    # Get item type
+    item_type = proc.line('git', 'config', 'pr.type', err_ok=True, log=None)
+    if not item_type:
+        _, item_type = get_item_metadata(owner, repo, number)
+
+    # Find draft file
+    if file:
+        draft_path = Path(file)
+        if not draft_path.exists():
+            err(f"Error: File not found: {file}")
+            exit(1)
+    else:
+        # Auto-detect: find uncommitted .md files that aren't description/comments
+        desc_file = find_description_file()
+        desc_name = desc_file.name if desc_file else None
+
+        # Get all .md files
+        md_files = list(Path.cwd().glob('*.md'))
+
+        # Filter out description and comment files
+        candidates = []
+        for f in md_files:
+            if f.name == desc_name:
+                continue  # Skip description file
+            if f.name.startswith('z') and get_comment_id_from_filename(f.name):
+                continue  # Skip comment files
+            candidates.append(f)
+
+        if len(candidates) == 0:
+            err("Error: No draft file found")
+            err("Create a .md file with your comment, or specify the file path explicitly")
+            exit(1)
+        elif len(candidates) > 1:
+            err("Error: Multiple potential draft files found:")
+            for c in candidates:
+                err(f"  - {c.name}")
+            err("Please specify which file to use: ghpr comment <file>")
+            exit(1)
+
+        draft_path = candidates[0]
+        err(f"Found draft file: {draft_path.name}")
+
+    # Read the draft content
+    with open(draft_path, 'r') as f:
+        comment_body = f.read().strip()
+
+    if not comment_body:
+        err("Error: Draft file is empty")
+        exit(1)
+
+    # Get current user
+    current_user = get_current_github_user()
+    if not current_user:
+        err("Error: Could not determine current GitHub user")
+        exit(1)
+
+    # Post comment to GitHub
+    item_label = 'issue' if item_type == 'issue' else 'PR'
+    err(f"Posting comment to {item_label} {owner}/{repo}#{number}...")
+
+    with NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        f.write(comment_body)
+        temp_file = f.name
+
+    try:
+        # Post the comment
+        result = proc.json(
+            'gh', 'api',
+            '-X', 'POST',
+            f'repos/{owner}/{repo}/issues/{number}/comments',
+            '-f', f'body=@{temp_file}',
+            log=None
+        )
+        comment_id = str(result['id'])
+        created_at = result['created_at']
+        updated_at = result.get('updated_at', created_at)
+
+        err(f"Comment posted successfully (ID: {comment_id})")
+
+        # Write comment file with proper format
+        comment_file = write_comment_file(comment_id, current_user, created_at, updated_at, comment_body)
+        err(f"Created comment file: {comment_file.name}")
+
+        # Remove draft file if it's different from the comment file
+        if draft_path != comment_file:
+            draft_path.unlink()
+            err(f"Removed draft file: {draft_path.name}")
+
+        # Stage the comment file
+        proc.run('git', 'add', str(comment_file), log=None)
+
+        # Commit
+        proc.run('git', 'commit', '-m', f'Add comment {comment_id}', log=None)
+        err("Committed comment")
+
+        # Push to gist if it exists
+        gist_remote = find_gist_remote()
+        if gist_remote:
+            remotes = proc.lines('git', 'remote', log=None)
+            if gist_remote in remotes:
+                proc.run('git', 'push', gist_remote, 'main', '--force', log=None)
+                err(f"Pushed to gist remote '{gist_remote}'")
+
+    finally:
+        unlink(temp_file)
+
+
 @cli.command(name='ingest-attachments')
 @opt('-b', '--branch', help='Branch name for attachments (default: $GHPR_INGEST_BRANCH or "attachments")')
 @flag('--no-ingest', help='Disable attachment ingestion')
