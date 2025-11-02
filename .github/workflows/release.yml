@@ -1,0 +1,63 @@
+name: Build and Release
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: astral-sh/setup-uv@v7
+    - run: uv python install ${{ matrix.python-version }}
+    - name: Install ghpr
+      run: uv sync --python ${{ matrix.python-version }}
+    - name: Verify CLI loads
+      run: uv run ghpr --help
+    - name: Verify all commands are accessible
+      run: |
+        uv run ghpr clone --help
+        uv run ghpr push --help
+        uv run ghpr pull --help
+        uv run ghpr diff --help
+        uv run ghpr comment --help
+        uv run ghpr shell-integration --help
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+    - uses: actions/checkout@v4
+    - name: Fetch tag annotation
+      run: git fetch origin tag ${{ github.ref_name }} --force
+    - uses: astral-sh/setup-uv@v7
+    - run: uv python install 3.12
+    - name: Build package
+      run: uvx --from build pyproject-build --outdir dist
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+    - name: Get tag message
+      id: tag
+      run: |
+        TAG_MSG=$(git tag -l --format='%(contents:body)' ${{ github.ref_name }})
+        echo "message<<EOF" >> $GITHUB_OUTPUT
+        echo "$TAG_MSG" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: dist/*
+        body: |
+          ${{ steps.tag.outputs.message }}
+        generate_release_notes: true
