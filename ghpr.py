@@ -22,10 +22,15 @@ from click import Choice, group
 from utz import proc, err, cd
 from utz.cli import arg, flag, opt
 
-# Add parent directory to path for local imports
-sys.path.insert(0, dirname(dirname(abspath(__file__))))
-
-from git_helpers.util.branch_resolution import resolve_remote_ref
+# Import resolve_remote_ref from utz
+try:
+    from utz.git.branch import resolve_remote_ref
+except ImportError:
+    # Fallback: define a stub that raises an informative error
+    def resolve_remote_ref(verbose=False):
+        raise ImportError(
+            "utz.git.branch.resolve_remote_ref not available. Update utz or specify --head explicitly."
+        )
 
 # Constants
 DEFAULT_GIST_REMOTE = 'g'

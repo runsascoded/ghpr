@@ -132,8 +132,7 @@ ghpr clone https://github.com/marin-community/marin/issues/1773
 
 ## Related Files
 
-- `utz` library: Used for `proc` (subprocess), `err` (stderr output), `cd` (context manager)
-- Helper functions in `git_helpers` module (imported from parent repo)
+- `utz` library: Used for `proc` (subprocess), `err` (stderr output), `cd` (context manager), and git utilities
 
 ## Dependencies
 
