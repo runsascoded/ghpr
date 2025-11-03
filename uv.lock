@@ -53,7 +53,7 @@ test = [
 requires-dist = [
     { name = "click", specifier = ">=8.0" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=7.0" },
-    { name = "utz", specifier = ">=0.1.0" },
+    { name = "utz", specifier = ">=0.21.2" },
 ]
 provides-extras = ["test"]
 
@@ -180,12 +180,12 @@ wheels = [
 
 [[package]]
 name = "utz"
-version = "0.21.1"
+version = "0.21.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "stdlb" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f9/22/1ff4ec36521927c0fff362a61841f2bd9df220c47af0e61b5caa784433b3/utz-0.21.1.tar.gz", hash = "sha256:ee9dd49c124494d68fceba09fb0258ab393c48b5390dfd2cbd69fe6e81a7dc4d", size = 98162, upload-time = "2025-11-01T19:59:04.475Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ba/11/0299d2719dd18e50d0fa5feb2a4b47c3b18f4396a1e54c4063032938ecdd/utz-0.21.2.tar.gz", hash = "sha256:7647fa5bd311ce924f2e6391856d9c869f7a3bd8d7104c91933cf0eba237336e", size = 101274, upload-time = "2025-11-03T02:25:58.114Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/23/db/18498348f27e04aff83158bcc8b260ddec0b21d3287fa316afb3cd51c76e/utz-0.21.1-py3-none-any.whl", hash = "sha256:6539d51325d92449761194df38da8bbae6f645d8078ef6bb5b0072c6d4d70d2e", size = 82901, upload-time = "2025-11-01T19:59:03.016Z" },
+    { url = "https://files.pythonhosted.org/packages/d3/09/f1216df16b1623c55e7941e21fad43c1ff958436b70deb753e89e7ef4268/utz-0.21.2-py3-none-any.whl", hash = "sha256:9833c41870aea37bbb88ed2739531115d5f35434e327b7b916a133e8549969dc", size = 85975, upload-time = "2025-11-03T02:25:56.685Z" },
 ]
