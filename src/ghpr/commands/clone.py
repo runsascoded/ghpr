@@ -66,7 +66,17 @@ def clone(
 
     # Use gh/{number} naming (PRs are issues, so same pattern for both)
     if not directory:
-        directory = f'gh/{number}'
+        # Declarative goal: create at {git_root}/gh/{number}/
+        # Calculate relative path from cwd to that target
+        try:
+            from utz.git import root as git_root
+            root_path = Path(git_root())
+            target_absolute = root_path / 'gh' / str(number)
+            cwd = Path.cwd()
+            directory = str(target_absolute.relative_to(cwd))
+        except Exception:
+            # Fallback: if not in a git repo or can't determine, use gh/{number}
+            directory = f'gh/{number}'
 
     target_path = Path(directory)
 
@@ -169,22 +179,34 @@ def clone(
             webbrowser.open(gist_url)
             err("Opened gist in browser")
 
-            # Add gist footer to item (default behavior)
-            err(f"Adding gist footer to {item_label}...")
-            body_with_footer = add_gist_footer(body, gist_url, visible=False)
-
-            # Update item with footer
-            with NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-                f.write(body_with_footer)
-                temp_file = f.name
-
+            # Only add gist footer if user is the author (avoid editing others' PRs/Issues)
             try:
-                gh_cmd = 'pr' if detected_type == 'pr' else 'issue'
-                proc.run('gh', gh_cmd, 'edit', str(number), '-R', f'{owner}/{repo}',
-                        '--body-file', temp_file, log=None)
-                err(f"Added gist footer to {item_label}")
-            finally:
-                unlink(temp_file)
+                from ..api import get_current_github_user
+                current_user = get_current_github_user()
+                pr_author = item_data.get('user', {}).get('login')
+
+                if current_user == pr_author:
+                    err(f"Adding gist footer to {item_label}...")
+                    body_with_footer = add_gist_footer(body, gist_url, visible=False)
+
+                    # Update item with footer
+                    with NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+                        f.write(body_with_footer)
+                        temp_file = f.name
+
+                    try:
+                        gh_cmd = 'pr' if detected_type == 'pr' else 'issue'
+                        proc.run('gh', gh_cmd, 'edit', str(number), '-R', f'{owner}/{repo}',
+                                '--body-file', temp_file, log=None)
+                        err(f"Added gist footer to {item_label}")
+                    finally:
+                        unlink(temp_file)
+                else:
+                    err(f"Skipping gist footer (not the {item_label} author)")
+                    err(f"Gist URL: {gist_url}")
+            except Exception as e:
+                err(f"Warning: Could not add gist footer: {e}")
+                err(f"Gist URL: {gist_url}")
 
     err(f"Successfully cloned {item_label} to {target_path}")
     err(f"URL: {item_data['url']}")
