@@ -1167,7 +1167,8 @@ def push(
                             'gh', 'api',
                             '-X', 'POST',
                             f'repos/{owner}/{repo}/issues/{number}/comments',
-                            '-f', f'body=@{temp_file}',
+                            '--input', temp_file,
+                            '-f', 'body=@-',
                             log=False
                         )
                         comment_id = str(result['id'])
@@ -1276,7 +1277,8 @@ def push(
         if new_comment_renames and not dry_run:
             # Remove old draft files and add new comment files
             for old_name, new_name in new_comment_renames:
-                proc.run('git', 'rm', old_name, log=False)
+                # Use -f to force removal even if there are local modifications
+                proc.run('git', 'rm', '-f', old_name, log=False)
                 proc.run('git', 'add', new_name, log=False)
 
             # Create commit message
