@@ -51,12 +51,8 @@ def get_pr_metadata(owner: str, repo: str, pr_number: str) -> dict | None:
 
 def get_current_github_user() -> str | None:
     """Get the currently authenticated GitHub user."""
-    try:
-        user = proc.line('gh', 'api', 'user', '--jq', '.login', log=False)
-        return user
-    except Exception as e:
-        err(f"Warning: Could not get current GitHub user: {e}")
-        return None
+    from utz.git.gist import get_github_user
+    return get_github_user()
 
 
 def get_item_comments(owner: str, repo: str, number: str, item_type: str) -> list[dict]:

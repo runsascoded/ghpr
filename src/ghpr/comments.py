@@ -20,10 +20,14 @@ def write_comment_file(comment_id: str, author: str, created_at: str, updated_at
     if updated_at and updated_at != created_at:
         content_lines.append(f'<!-- updated_at: {updated_at} -->')
 
-    content_lines.extend(['', body.rstrip(), ''])
+    content_lines.append('')  # Blank line after metadata
 
+    # Write metadata lines
     with open(filepath, 'w') as f:
         f.write('\n'.join(content_lines))
+        f.write('\n')
+        # Write body exactly as-is, preserving all whitespace including trailing newlines
+        f.write(body)
 
     return filepath
 
@@ -43,18 +47,21 @@ def read_comment_file(filepath: Path) -> tuple[str | None, str | None, str | Non
     body_start = 0
 
     for i, line in enumerate(lines):
-        line = line.strip()
-        if line.startswith('<!-- author:'):
-            author = line.replace('<!-- author:', '').replace('-->', '').strip()
-        elif line.startswith('<!-- created_at:'):
-            created_at = line.replace('<!-- created_at:', '').replace('-->', '').strip()
-        elif line.startswith('<!-- updated_at:'):
-            updated_at = line.replace('<!-- updated_at:', '').replace('-->', '').strip()
-        elif not line.startswith('<!--'):
+        line_stripped = line.strip()
+        if line_stripped.startswith('<!-- author:'):
+            author = line_stripped.replace('<!-- author:', '').replace('-->', '').strip()
+        elif line_stripped.startswith('<!-- created_at:'):
+            created_at = line_stripped.replace('<!-- created_at:', '').replace('-->', '').strip()
+        elif line_stripped.startswith('<!-- updated_at:'):
+            updated_at = line_stripped.replace('<!-- updated_at:', '').replace('-->', '').strip()
+        elif not line_stripped.startswith('<!--'):
             body_start = i
             break
 
-    body = ''.join(lines[body_start:]).strip()
+    # Preserve body exactly as-is, including trailing newlines
+    body = ''.join(lines[body_start:])
+    # Only strip leading whitespace/newlines
+    body = body.lstrip()
     return author, created_at, updated_at, body
 
 

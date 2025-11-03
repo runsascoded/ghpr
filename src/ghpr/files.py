@@ -79,49 +79,29 @@ def write_description_with_link_ref(
     pr_ref = f'{owner}/{repo}#{pr_number}'
     link_def = f'[{pr_ref}]: {url}'
 
-    # Split body into lines
-    lines = body.split('\n') if body else []
+    # Check if the link def already exists in the body
+    pr_link_pattern = re.compile(r'^\[' + re.escape(pr_ref) + r']:', re.MULTILINE)
+    link_exists = pr_link_pattern.search(body) if body else False
 
-    # Find the footer section (trailing lines that are either link defs or blank)
-    footer_start = len(lines)
-    for i in range(len(lines) - 1, -1, -1):
-        line = lines[i].strip()
-        if line and not LINK_DEF_PATTERN.match(line):
-            # Found a non-link, non-blank line
-            footer_start = i + 1
-            break
-
-    # Split into main content and footer
-    main_content = lines[:footer_start]
-    footer_lines = lines[footer_start:]
-
-    # Check if our link def already exists in the footer
-    pr_link_pattern = re.compile(r'^\[' + re.escape(pr_ref) + r']:')
-    link_exists = any(pr_link_pattern.match(line) for line in footer_lines)
-
-    # Write the file
+    # Write the file - preserve exact body content
     with open(file_path, 'w') as f:
-        write = partial(print, file=f)
+        # Write header
+        f.write(f'# [{pr_ref}] {title}\n')
 
-        # Write header with link-reference style
-        write(f'# [{pr_ref}] {title}')
+        # Write body exactly as GitHub gave it to us
+        if body:
+            f.write('\n')
+            f.write(body)
 
-        # Write main content
-        if main_content and any(line.strip() for line in main_content):
-            write()
-            write('\n'.join(main_content).rstrip())
-
-        # Write footer with link definitions
+        # Ensure the link def exists (add it if not)
         if not link_exists:
-            # Add our link as the first in the footer
-            write()
-            write(link_def)
-            if footer_lines and any(line.strip() for line in footer_lines):
-                write('\n'.join(footer_lines).rstrip())
-        elif footer_lines:
-            # Link already exists, just write the existing footer
-            write()
-            write('\n'.join(footer_lines).rstrip())
+            # Add blank line if body doesn't end with one
+            if body and not body.endswith('\n'):
+                f.write('\n')
+            # Add blank line before footer section
+            if not body or not body.endswith('\n\n'):
+                f.write('\n')
+            f.write(f'{link_def}\n')
 
 
 def read_description_file(path: Path = None) -> tuple[str | None, str | None]:

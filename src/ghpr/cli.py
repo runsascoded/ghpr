@@ -78,30 +78,54 @@ def render_unified_diff(
     BOLD = '\033[1m' if use_color else ''
     RESET = '\033[0m' if use_color else ''
 
-    local_lines = local_content.splitlines(keepends=True)
-    remote_lines = remote_content.splitlines(keepends=True)
+    # Check if contents have final newlines
+    remote_has_final_newline = remote_content.endswith('\n')
+    local_has_final_newline = local_content.endswith('\n')
 
-    diff_lines = difflib.unified_diff(
+    # For proper diff display, normalize both to end with newline for comparison
+    # This prevents difflib from showing the last line as changed when only the
+    # trailing newline differs
+    remote_normalized = remote_content if remote_has_final_newline else remote_content + '\n'
+    local_normalized = local_content if local_has_final_newline else local_content + '\n'
+
+    local_lines = local_normalized.splitlines(keepends=True)
+    remote_lines = remote_normalized.splitlines(keepends=True)
+
+    diff_lines = list(difflib.unified_diff(
         remote_lines,
         local_lines,
         fromfile=fromfile,
         tofile=tofile,
         lineterm=''
-    )
+    ))
 
-    for line in diff_lines:
-        if line.startswith('+++'):
-            log(f"{BOLD}{line.rstrip()}{RESET}")
-        elif line.startswith('---'):
-            log(f"{BOLD}{line.rstrip()}{RESET}")
-        elif line.startswith('@@'):
-            log(f"{CYAN}{line.rstrip()}{RESET}")
-        elif line.startswith('+'):
-            log(f"{GREEN}{line.rstrip()}{RESET}")
-        elif line.startswith('-'):
-            log(f"{RED}{line.rstrip()}{RESET}")
-        else:
-            log(line.rstrip())
+    # Only show diff if there are actual content differences
+    if diff_lines:
+        for line in diff_lines:
+            line = line.rstrip('\n')
+            if line.startswith('+++'):
+                log(f"{BOLD}{line}{RESET}")
+            elif line.startswith('---'):
+                log(f"{BOLD}{line}{RESET}")
+            elif line.startswith('@@'):
+                log(f"{CYAN}{line}{RESET}")
+            elif line.startswith('+'):
+                log(f"{GREEN}{line}{RESET}")
+            elif line.startswith('-'):
+                log(f"{RED}{line}{RESET}")
+            else:
+                log(line)
+
+        # Add git-style "No newline at end of file" indicator after the diff
+        if not remote_has_final_newline:
+            log(f"{CYAN}\\ No newline at end of file{RESET}")
+        if remote_has_final_newline and not local_has_final_newline:
+            log(f"{CYAN}\\ No newline at end of file{RESET}")
+    elif remote_has_final_newline != local_has_final_newline:
+        # Only difference is trailing newline - show minimal diff
+        log(f"{BOLD}--- {fromfile}{RESET}")
+        log(f"{BOLD}+++ {tofile}{RESET}")
+        log(f"{CYAN}Only trailing newline differs{RESET}")
 
 
 # Try to import git_helpers, but it's OK if not available
@@ -1004,6 +1028,66 @@ def push(
         err("Checking for comment changes...")
         current_user = get_current_github_user()
 
+        # First, handle new draft comments (new*.md files from HEAD)
+        # Get list of files in HEAD
+        try:
+            head_files = proc.lines('git', 'ls-tree', '--name-only', 'HEAD', log=False)
+            draft_files = [f for f in head_files if f.startswith('new') and f.endswith('.md')]
+        except Exception:
+            draft_files = []
+
+        new_comment_renames = []  # Track (old_name, new_name) for commit message
+
+        if draft_files:
+            err(f"Found {len(draft_files)} draft comment(s) to post: {', '.join(draft_files)}")
+
+            for draft_file in draft_files:
+                # Read content from HEAD
+                try:
+                    draft_content = proc.text('git', 'show', f'HEAD:{draft_file}', log=False)
+                except Exception as e:
+                    err(f"Warning: Could not read {draft_file} from HEAD: {e}")
+                    continue
+
+                if not draft_content.strip():
+                    err(f"Warning: Skipping empty draft file: {draft_file}")
+                    continue
+
+                if dry_run:
+                    err(f"[DRY-RUN] Would post {draft_file} as new comment")
+                else:
+                    # Post as new comment
+                    err(f"Posting {draft_file} as new comment...")
+                    with NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+                        f.write(draft_content)
+                        temp_file = f.name
+
+                    try:
+                        result = proc.json(
+                            'gh', 'api',
+                            '-X', 'POST',
+                            f'repos/{owner}/{repo}/issues/{number}/comments',
+                            '-f', f'body=@{temp_file}',
+                            log=False
+                        )
+                        comment_id = str(result['id'])
+                        created_at = result['created_at']
+                        updated_at = result.get('updated_at', created_at)
+
+                        # Create the z{id}-{author}.md file
+                        comment_file = write_comment_file(comment_id, current_user, created_at, updated_at, draft_content.strip())
+                        new_filename = comment_file.name
+
+                        err(f"Posted comment {comment_id}, created {new_filename}")
+
+                        # Track for commit
+                        new_comment_renames.append((draft_file, new_filename))
+
+                    except Exception as e:
+                        err(f"Error posting {draft_file}: {e}")
+                    finally:
+                        unlink(temp_file)
+
         # Find all local comment files (z*.md)
         comment_files = sorted(glob('z*.md'))
 
@@ -1038,6 +1122,7 @@ def push(
                     # Editing existing comment
                     remote_comment = remote_comments_by_id[comment_id]
                     remote_body = remote_comment.get('body', '').replace('\r\n', '\n')
+                    comment_url = remote_comment.get('html_url', f'Comment {comment_id}')
 
                     if body == remote_body:
                         err(f"Skipping {comment_file_path} - no changes")
@@ -1056,8 +1141,8 @@ def push(
                         render_unified_diff(
                             remote_body,
                             body,
-                            fromfile=f'Remote comment {comment_id}',
-                            tofile=f'Local {comment_file_path} (will be pushed)',
+                            fromfile=comment_url,
+                            tofile=f'{comment_file_path} (will be pushed)',
                             use_color=use_color
                         )
                         err("")  # blank line
@@ -1086,6 +1171,23 @@ def push(
                     comments_skipped += 1
 
             err(f"Comments: {comments_pushed} pushed, {comments_skipped} skipped")
+
+        # Commit the new comment renames (new*.md → z{id}-{author}.md)
+        if new_comment_renames and not dry_run:
+            # Remove old draft files and add new comment files
+            for old_name, new_name in new_comment_renames:
+                proc.run('git', 'rm', old_name, log=False)
+                proc.run('git', 'add', new_name, log=False)
+
+            # Create commit message
+            if len(new_comment_renames) == 1:
+                old, new = new_comment_renames[0]
+                commit_msg = f'Post new comment: {old} → {new}'
+            else:
+                commit_msg = f'Post {len(new_comment_renames)} new comments'
+
+            proc.run('git', 'commit', '-m', commit_msg, log=False)
+            err(f"Committed {len(new_comment_renames)} new comment(s)")
 
 
 def sync_to_gist(
@@ -1316,7 +1418,7 @@ def upload(
     alt: str | None,
 ) -> None:
     """Upload images to the PR's gist and get URLs."""
-    import gist_upload
+    from utz.git.gist import upload_files_to_gist, format_upload_output
 
     # Get PR info
     owner, repo, pr_number = get_pr_info_from_path()
@@ -1335,17 +1437,19 @@ def upload(
     gist_id = proc.line('git', 'config', 'pr.gist', err_ok=True, log=None)
 
     if not gist_id:
-        # Create a gist for this PR
+        # Create a minimal gist for uploads
         err("Creating gist for PR assets...")
-        description = f'{owner}/{repo}#{pr_number} assets'
-        desc_content = "# PR Assets\nImage assets for PR"
-
-        gist_id = gist_upload.create_gist(description, desc_content)
+        from utz.git.gist import create_gist
+        gist_id = create_gist(
+            description=f'{owner}/{repo}#{pr_number} assets',
+            content="# PR Assets\nImage assets for PR\n"
+        )
         if gist_id:
+            # Store the gist ID in git config
             proc.run('git', 'config', 'pr.gist', gist_id, log=None)
             err(f"Created gist: {gist_id}")
         else:
-            err("Error: Could not create gist")
+            err("Error: Failed to create gist")
             exit(1)
 
     # Check if we're already in a gist clone
@@ -1378,7 +1482,7 @@ def upload(
         file_list.append((file_path, filename))
 
     # Upload files using the library
-    results = gist_upload.upload_files_to_gist(
+    results = upload_files_to_gist(
         file_list,
         gist_id,
         branch=branch,
@@ -1389,7 +1493,7 @@ def upload(
 
     # Output formatted results
     for orig_name, safe_name, url in results:
-        output = gist_upload.format_output(orig_name, url, format, alt)
+        output = format_upload_output(orig_name, url, format, alt)
         print(output)
 
     if not results:
@@ -1528,14 +1632,15 @@ def diff(
                     # Compare with remote
                     remote_comment = remote_comments_by_id[comment_id]
                     remote_body = remote_comment.get('body', '').replace('\r\n', '\n')
+                    comment_url = remote_comment.get('html_url', f'Comment {comment_id}')
 
                     if local_body != remote_body:
                         err(f"\n{BOLD}{YELLOW}=== Comment {comment_id} (by {author}) - Differences ==={RESET}")
                         render_unified_diff(
                             remote_body,
                             local_body,
-                            fromfile=f'Remote comment {comment_id}',
-                            tofile=f'Local {comment_file_path}',
+                            fromfile=comment_url,
+                            tofile=comment_file_path,
                             use_color=use_color,
                             log=print
                         )
@@ -1675,129 +1780,6 @@ def pull(
     # Convert pull's footer boolean to push's footer count
     footer_count = 1 if footer else 0 if footer is False else 0
     push.callback(gist, dry_run, footer_count, no_footer=False, open_browser=open_browser, images=False, gist_private=gist_private, no_comments=no_comments, force_others=False)
-
-
-@cli.command()
-@arg('file', required=False)
-def comment(file: str | None) -> None:
-    """Add a new comment to the current PR/Issue from a draft file.
-
-    If FILE is not specified, will auto-detect exactly one new*.md file.
-
-    When auto-detecting (no FILE specified):
-    - Only considers files matching new*.md pattern (e.g., new.md, new-2.md)
-    - Errors if multiple new*.md files exist (use explicit path to choose)
-
-    When FILE is specified explicitly:
-    - Any .md file path is allowed
-
-    Workflow:
-    1. Find or validate the draft file
-    2. Post it as a comment to GitHub
-    3. Fetch the comment back to get its ID
-    4. Rename draft to z{comment_id}-{author}.md
-    5. Commit and push to gist (if exists)
-    """
-    # Get PR/Issue info
-    owner, repo, number = get_pr_info_from_path()
-    if not all([owner, repo, number]):
-        err("Error: Could not determine PR/Issue from current directory")
-        exit(1)
-
-    # Get item type
-    item_type = proc.line('git', 'config', 'pr.type', err_ok=True, log=None)
-    if not item_type:
-        _, item_type = get_item_metadata(owner, repo, number)
-
-    # Find draft file
-    if file:
-        # Explicit path: any .md file is allowed
-        draft_path = Path(file)
-        if not draft_path.exists():
-            err(f"Error: File not found: {file}")
-            exit(1)
-    else:
-        # Auto-detect: only consider new*.md files
-        candidates = list(Path.cwd().glob('new*.md'))
-
-        if len(candidates) == 0:
-            err("Error: No draft file found")
-            err("Create a new*.md file with your comment (e.g., new.md, new-followup.md)")
-            err("Or specify the file path explicitly: ghpr comment <file>")
-            exit(1)
-        elif len(candidates) > 1:
-            err("Error: Multiple draft files found:")
-            for c in candidates:
-                err(f"  - {c.name}")
-            err("Please specify which file to use: ghpr comment <file>")
-            exit(1)
-
-        draft_path = candidates[0]
-        err(f"Found draft file: {draft_path.name}")
-
-    # Read the draft content
-    with open(draft_path, 'r') as f:
-        comment_body = f.read().strip()
-
-    if not comment_body:
-        err("Error: Draft file is empty")
-        exit(1)
-
-    # Get current user
-    current_user = get_current_github_user()
-    if not current_user:
-        err("Error: Could not determine current GitHub user")
-        exit(1)
-
-    # Post comment to GitHub
-    item_label = 'issue' if item_type == 'issue' else 'PR'
-    err(f"Posting comment to {item_label} {owner}/{repo}#{number}...")
-
-    with NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-        f.write(comment_body)
-        temp_file = f.name
-
-    try:
-        # Post the comment
-        result = proc.json(
-            'gh', 'api',
-            '-X', 'POST',
-            f'repos/{owner}/{repo}/issues/{number}/comments',
-            '-f', f'body=@{temp_file}',
-            log=None
-        )
-        comment_id = str(result['id'])
-        created_at = result['created_at']
-        updated_at = result.get('updated_at', created_at)
-
-        err(f"Comment posted successfully (ID: {comment_id})")
-
-        # Write comment file with proper format
-        comment_file = write_comment_file(comment_id, current_user, created_at, updated_at, comment_body)
-        err(f"Created comment file: {comment_file.name}")
-
-        # Remove draft file if it's different from the comment file
-        if draft_path != comment_file:
-            draft_path.unlink()
-            err(f"Removed draft file: {draft_path.name}")
-
-        # Stage the comment file
-        proc.run('git', 'add', str(comment_file), log=None)
-
-        # Commit
-        proc.run('git', 'commit', '-m', f'Add comment {comment_id}', log=None)
-        err("Committed comment")
-
-        # Push to gist if it exists
-        gist_remote = find_gist_remote()
-        if gist_remote:
-            remotes = proc.lines('git', 'remote', log=None)
-            if gist_remote in remotes:
-                proc.run('git', 'push', gist_remote, 'main', '--force', log=None)
-                err(f"Pushed to gist remote '{gist_remote}'")
-
-    finally:
-        unlink(temp_file)
 
 
 @cli.command(name='ingest-attachments')
