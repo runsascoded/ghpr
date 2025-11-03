@@ -1158,11 +1158,8 @@ def push(
 
                     # Post as new comment
                     err(f"Posting {draft_file} as new comment...")
-                    # Strip content to avoid trailing whitespace issues
-                    clean_content = draft_content.strip()
-
                     with NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-                        f.write(clean_content)
+                        f.write(draft_content)
                         temp_file = f.name
 
                     try:
@@ -1177,8 +1174,11 @@ def push(
                         created_at = result['created_at']
                         updated_at = result.get('updated_at', created_at)
 
-                        # Create the z{id}-{author}.md file
-                        comment_file = write_comment_file(comment_id, current_user, created_at, updated_at, clean_content)
+                        # Get the body from the response (GitHub's canonical version)
+                        posted_body = result.get('body', '').replace('\r\n', '\n')
+
+                        # Create the z{id}-{author}.md file with GitHub's version
+                        comment_file = write_comment_file(comment_id, current_user, created_at, updated_at, posted_body)
                         new_filename = comment_file.name
 
                         err(f"Posted comment {comment_id}, created {new_filename}")
