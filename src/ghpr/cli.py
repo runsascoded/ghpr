@@ -106,16 +106,17 @@ def get_owner_repo(repo_arg: str | None = None) -> tuple[str, str]:
 
     # Try current directory's git remotes
     try:
-        remotes = proc.lines('git', 'remote', log=None, err_ok=True)
-        if remotes:
-            # Try 'origin' first
-            remote_to_try = 'origin' if 'origin' in remotes else remotes[0]
-            remote_url = proc.line('git', 'remote', 'get-url', remote_to_try, log=None, err_ok=True)
-            if remote_url:
-                from ghpr.patterns import GITHUB_URL_PATTERN
-                match = GITHUB_URL_PATTERN.search(remote_url)
-                if match:
-                    return match.group(1), match.group(2)
+        from utz.git.github import get_remotes
+        github_remotes = get_remotes()
+        if github_remotes:
+            # Try 'origin' first, then 'u', then any
+            for remote_name in ['origin', 'u'] + list(github_remotes.keys()):
+                if remote_name in github_remotes:
+                    owner_repo = github_remotes[remote_name]
+                    parts = owner_repo.split('/')
+                    if len(parts) == 2:
+                        return parts[0], parts[1]
+                    break
     except Exception:
         pass
 
