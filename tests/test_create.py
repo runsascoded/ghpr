@@ -7,7 +7,8 @@ from tempfile import TemporaryDirectory
 import os
 from click.testing import CliRunner
 
-from ghpr.cli import create_new_pr, create_new_issue, cli
+from ghpr.cli import cli
+from ghpr.commands.create import create_new_pr, create_new_issue
 
 
 class TestInit:
@@ -18,7 +19,7 @@ class TestInit:
         runner = CliRunner()
 
         with runner.isolated_filesystem(temp_dir=tmp_path):
-            with patch('ghpr.cli.proc') as mock_proc:
+            with patch('ghpr.commands.create.proc') as mock_proc:
                 result = runner.invoke(cli, ['init', '-r', 'test-owner/test-repo'])
 
                 assert result.exit_code == 0
@@ -54,9 +55,9 @@ class TestCreateIssue:
         Path('DESCRIPTION.md').write_text('# Test Issue\n\nTest body content\n')
         Path('.git').mkdir()
 
-        with patch('ghpr.cli.proc') as mock_proc, \
-             patch('ghpr.cli.get_owner_repo') as mock_get_repo, \
-             patch('ghpr.cli.err'):
+        with patch('ghpr.commands.create.proc') as mock_proc, \
+             patch('ghpr.commands.create.get_owner_repo') as mock_get_repo, \
+             patch('ghpr.commands.create.err'):
 
             mock_get_repo.return_value = ('test-owner', 'test-repo')
 
@@ -73,11 +74,11 @@ class TestCreateIssue:
         Path('DESCRIPTION.md').write_text('# Test Issue\n\nTest body content\n')
         Path('.git').mkdir()
 
-        with patch('ghpr.cli.proc') as mock_proc, \
-             patch('ghpr.cli.get_owner_repo') as mock_get_repo, \
-             patch('ghpr.cli.read_description_file') as mock_read_desc, \
-             patch('ghpr.cli.write_description_with_link_ref') as mock_write, \
-             patch('ghpr.cli.err'), \
+        with patch('ghpr.commands.create.proc') as mock_proc, \
+             patch('ghpr.commands.create.get_owner_repo') as mock_get_repo, \
+             patch('ghpr.commands.create.read_description_file') as mock_read_desc, \
+             patch('ghpr.commands.create.write_description_with_link_ref') as mock_write, \
+             patch('ghpr.commands.create.err'), \
              patch('os.rename'):
 
             mock_get_repo.return_value = ('test-owner', 'test-repo')
@@ -113,11 +114,11 @@ class TestCreateIssue:
         Path('DESCRIPTION.md').write_text('# Test Issue\n\nTest body\n')
         Path('.git').mkdir()
 
-        with patch('ghpr.cli.proc') as mock_proc, \
-             patch('ghpr.cli.get_owner_repo') as mock_get_repo, \
-             patch('ghpr.cli.read_description_file') as mock_read_desc, \
-             patch('ghpr.cli.write_description_with_link_ref'), \
-             patch('ghpr.cli.err'), \
+        with patch('ghpr.commands.create.proc') as mock_proc, \
+             patch('ghpr.commands.create.get_owner_repo') as mock_get_repo, \
+             patch('ghpr.commands.create.read_description_file') as mock_read_desc, \
+             patch('ghpr.commands.create.write_description_with_link_ref'), \
+             patch('ghpr.commands.create.err'), \
              patch('os.rename'):
 
             mock_get_repo.return_value = ('other-owner', 'other-repo')
@@ -145,10 +146,10 @@ class TestCreatePR:
         Path('DESCRIPTION.md').write_text('# Test PR\n\nTest body\n')
         Path('.git').mkdir()
 
-        with patch('ghpr.cli.proc') as mock_proc, \
-             patch('ghpr.cli.read_description_file') as mock_read_desc, \
-             patch('ghpr.cli.write_description_with_link_ref') as mock_write, \
-             patch('ghpr.cli.err'), \
+        with patch('ghpr.commands.create.proc') as mock_proc, \
+             patch('ghpr.commands.create.read_description_file') as mock_read_desc, \
+             patch('ghpr.commands.create.write_description_with_link_ref') as mock_write, \
+             patch('ghpr.commands.create.err'), \
              patch('os.rename'):
 
             # Setup mocks for successful flow
@@ -191,10 +192,10 @@ class TestCreatePR:
         Path('DESCRIPTION.md').write_text('# Draft PR\n\nDraft body\n')
         Path('.git').mkdir()
 
-        with patch('ghpr.cli.proc') as mock_proc, \
-             patch('ghpr.cli.read_description_file') as mock_read_desc, \
-             patch('ghpr.cli.write_description_with_link_ref'), \
-             patch('ghpr.cli.err'), \
+        with patch('ghpr.commands.create.proc') as mock_proc, \
+             patch('ghpr.commands.create.read_description_file') as mock_read_desc, \
+             patch('ghpr.commands.create.write_description_with_link_ref'), \
+             patch('ghpr.commands.create.err'), \
              patch('os.rename'):
 
             def line_side_effect(*args, **kwargs):
