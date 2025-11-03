@@ -17,7 +17,7 @@ from ..config import get_pr_info_from_path
 from ..files import read_description_from_git, get_expected_description_filename, process_images_in_description
 from ..gist import add_gist_footer, create_gist, GIST_URL_WITH_USER_PATTERN, DEFAULT_GIST_REMOTE, find_gist_remote
 from ..patterns import extract_title_from_first_line
-from ..cli import render_comment_diff, render_unified_diff
+from ..render import render_comment_diff, render_unified_diff
 
 
 def push(

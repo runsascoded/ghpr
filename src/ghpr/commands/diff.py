@@ -10,7 +10,7 @@ from ..config import get_pr_info_from_path
 from ..files import read_description_from_git
 from ..gist import extract_gist_footer
 from ..patterns import extract_title_from_first_line
-from ..cli import render_comment_diff, render_unified_diff
+from ..render import render_comment_diff, render_unified_diff
 
 
 def diff(
