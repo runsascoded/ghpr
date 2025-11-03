@@ -310,42 +310,6 @@ def cli():
     pass
 
 
-@cli.command(name='shell-integration')
-@arg('shell', type=Choice(['bash', 'zsh', 'fish']), required=False)
-def shell_integration(shell: str | None) -> None:
-    """Output shell aliases for ghpr commands.
-
-    Usage:
-        # Bash/Zsh: Add to your ~/.bashrc or ~/.zshrc:
-        eval "$(ghpr shell-integration bash)"
-
-        # Fish: Add to your ~/.config/fish/config.fish:
-        ghpr shell-integration fish | source
-
-        # Or save to a file and source it:
-        ghpr shell-integration bash > ~/.ghpr-aliases.sh
-        echo 'source ~/.ghpr-aliases.sh' >> ~/.bashrc
-    """
-    # Auto-detect shell if not specified
-    if not shell:
-        shell_env = environ.get('SHELL', '')
-        if 'fish' in shell_env:
-            shell = 'fish'
-        elif 'zsh' in shell_env:
-            shell = 'zsh'
-        else:
-            shell = 'bash'  # default
-
-    # Get the package directory
-    pkg_dir = Path(__file__).parent.parent.parent
-    shell_file = pkg_dir / 'shell' / f'ghpr.{shell if shell != "zsh" else "bash"}'
-
-    if shell_file.exists():
-        with open(shell_file, 'r') as f:
-            print(f.read())
-    else:
-        err(f"Error: Shell integration file not found: {shell_file}")
-        exit(1)
 
 
 @cli.command()
@@ -738,128 +702,6 @@ def create_new_issue(
             err(f"Error creating issue: {e}")
             exit(1)
 
-
-@cli.command()
-@flag('-g', '--gist', help='Only show gist URL')
-def show(gist: bool) -> None:
-    """Show PR and/or gist URLs for current directory."""
-    # Get PR info
-    owner, repo, pr_number = get_pr_info_from_path()
-
-    if not all([owner, repo, pr_number]):
-        # Try from git config
-        owner = proc.line('git', 'config', 'pr.owner', err_ok=True, log=None) or ''
-        repo = proc.line('git', 'config', 'pr.repo', err_ok=True, log=None) or ''
-        pr_number = proc.line('git', 'config', 'pr.number', err_ok=True, log=None) or ''
-
-    if gist:
-        # Only show gist URL
-        gist_id = proc.line('git', 'config', 'pr.gist', err_ok=True, log=None)
-        if not gist_id:
-            # Try to find from remote
-            gist_remote = find_gist_remote()
-            if gist_remote:
-                remotes = proc.lines('git', 'remote', '-v', log=None)
-                for remote_line in remotes:
-                    if remote_line.startswith(f"{gist_remote}\t") and 'gist.github.com' in remote_line:
-                        match = GIST_ID_PATTERN.search(remote_line)
-                        if match:
-                            gist_id = match.group(1)
-                            break
-
-        if gist_id:
-            print(f"https://gist.github.com/{gist_id}")
-        else:
-            err("No gist found for this PR")
-            exit(1)
-    else:
-        # Show both PR and gist
-        if all([owner, repo, pr_number]):
-            pr_url = f"https://github.com/{owner}/{repo}/pull/{pr_number}"
-            print(f"PR: {pr_url}")
-
-            # Check for gist
-            gist_id = proc.line('git', 'config', 'pr.gist', err_ok=True, log=None)
-            if gist_id:
-                gist_url = f"https://gist.github.com/{gist_id}"
-                print(f"Gist: {gist_url}")
-
-            # Check for gist remote if no gist ID in config
-            if not gist_id:
-                gist_remote = find_gist_remote()
-                if gist_remote:
-                    remotes = proc.lines('git', 'remote', '-v', log=None)
-                    for remote_line in remotes:
-                        if remote_line.startswith(f"{gist_remote}\t"):
-                            if 'gist.github.com' in remote_line:
-                                match = GIST_ID_PATTERN.search(remote_line)
-                                if match:
-                                    gist_url = f"https://gist.github.com/{match.group(1)}"
-                                    print(f"Gist (from remote): {gist_url}")
-                                    break
-        else:
-            err("No PR information found in current directory")
-            exit(1)
-
-
-@cli.command(name='open')
-@flag('-g', '--gist', help='Open gist instead of PR')
-def open_pr(
-    gist: bool,
-) -> None:
-    """Open PR or gist in web browser."""
-    # Get PR info
-    owner, repo, pr_number = get_pr_info_from_path()
-
-    if not all([owner, repo, pr_number]):
-        # Try from git config
-        owner = proc.line('git', 'config', 'pr.owner', err_ok=True, log=None) or ''
-        repo = proc.line('git', 'config', 'pr.repo', err_ok=True, log=None) or ''
-        pr_number = proc.line('git', 'config', 'pr.number', err_ok=True, log=None) or ''
-
-    if not all([owner, repo, pr_number]):
-        # Check for PR-specific files
-        desc_file = find_description_file()
-        if desc_file:
-            # Parse PR info from the file
-            match = PR_FILENAME_PATTERN.match(desc_file.name)
-            if match:
-                repo = match.group(1)
-                pr_number = match.group(2)
-                # Try to get owner from git config
-                owner = proc.line('git', 'config', 'pr.owner', err_ok=True, log=None) or ''
-
-    if gist:
-        # Open gist
-        gist_id = proc.line('git', 'config', 'pr.gist', err_ok=True, log=None)
-        if not gist_id:
-            # Try to find from remote
-            gist_remote = find_gist_remote()
-            if gist_remote:
-                remotes = proc.lines('git', 'remote', '-v', log=None)
-                for remote_line in remotes:
-                    if remote_line.startswith(f"{gist_remote}\t") and 'gist.github.com' in remote_line:
-                        match = GIST_ID_PATTERN.search(remote_line)
-                        if match:
-                            gist_id = match.group(1)
-                            break
-
-        if gist_id:
-            gist_url = f"https://gist.github.com/{gist_id}"
-            webbrowser.open(gist_url)
-            err(f"Opened: {gist_url}")
-        else:
-            err("No gist found for this PR")
-            exit(1)
-    else:
-        # Open PR
-        if all([owner, repo, pr_number]):
-            pr_url = f"https://github.com/{owner}/{repo}/pull/{pr_number}"
-            webbrowser.open(pr_url)
-            err(f"Opened: {pr_url}")
-        else:
-            err("Error: No PR found in current directory")
-            exit(1)
 
 
 @cli.command()
@@ -1704,210 +1546,6 @@ def sync_to_gist(
 
 
 @cli.command()
-@arg('files', nargs=-1, required=True)
-@opt('-b', '--branch', default='assets', help='Branch name in gist (default: assets)')
-@opt('-f', '--format', type=Choice(['url', 'markdown', 'img', 'auto']), default='auto', help='Output format (default: auto - img for images, url for others)')
-@opt('-a', '--alt', help='Alt text for markdown/img format')
-def upload(
-    files: tuple[str, ...],
-    branch: str,
-    format: str,
-    alt: str | None,
-) -> None:
-    """Upload images to the PR's gist and get URLs."""
-    from utz.git.gist import upload_files_to_gist, format_upload_output
-
-    # Get PR info
-    owner, repo, pr_number = get_pr_info_from_path()
-
-    if not all([owner, repo, pr_number]):
-        try:
-            owner = proc.line('git', 'config', 'pr.owner', err_ok=True, log=None) or ''
-            repo = proc.line('git', 'config', 'pr.repo', err_ok=True, log=None) or ''
-            pr_number = proc.line('git', 'config', 'pr.number', err_ok=True, log=None) or ''
-        except Exception as e:
-            err(f"Error: Could not determine PR from directory or git config: {e}")
-            exit(1)
-
-    # Get or create gist
-    # Read gist ID from git config (optional)
-    gist_id = proc.line('git', 'config', 'pr.gist', err_ok=True, log=None)
-
-    if not gist_id:
-        # Create a minimal gist for uploads
-        err("Creating gist for PR assets...")
-        from utz.git.gist import create_gist
-        gist_id = create_gist(
-            description=f'{owner}/{repo}#{pr_number} assets',
-            content="# PR Assets\nImage assets for PR\n"
-        )
-        if gist_id:
-            # Store the gist ID in git config
-            proc.run('git', 'config', 'pr.gist', gist_id, log=None)
-            err(f"Created gist: {gist_id}")
-        else:
-            err("Error: Failed to create gist")
-            exit(1)
-
-    # Check if we're already in a gist clone
-    is_local_clone = False
-    remote_name = None
-    try:
-        # Check all remotes to see if any point to this gist
-        remotes = proc.lines('git', 'remote', log=None)
-        for remote in remotes:
-            if not remote:
-                continue
-            try:
-                remote_url = proc.line('git', 'remote', 'get-url', remote, err_ok=True, log=None)
-                if f'gist.github.com:{gist_id}' in remote_url or f'gist.github.com/{gist_id}' in remote_url:
-                    is_local_clone = True
-                    remote_name = remote
-                    err(f"Already in gist repository with remote '{remote}'")
-                    break
-            except Exception:
-                # Remote URL doesn't match gist pattern, continue checking others
-                continue
-    except Exception:
-        # Not in a gist repo, which is expected for PR directories
-        pass
-
-    # Prepare files for upload
-    file_list = []
-    for file_path in files:
-        filename = Path(file_path).name
-        file_list.append((file_path, filename))
-
-    # Upload files using the library
-    results = upload_files_to_gist(
-        file_list,
-        gist_id,
-        branch=branch,
-        is_local_clone=is_local_clone,
-        commit_msg=f'Add assets for {owner}/{repo}#{pr_number}',
-        remote_name=remote_name
-    )
-
-    # Output formatted results
-    for orig_name, safe_name, url in results:
-        output = format_upload_output(orig_name, url, format, alt)
-        print(output)
-
-    if not results:
-        exit(1)
-
-
-@cli.command()
-@opt('-c', '--color', type=Choice(['auto', 'always', 'never']), default='auto', help='When to use colored output (default: auto)')
-@flag('--no-comments', help='Skip diffing comments')
-def diff(
-    color: str,
-    no_comments: bool,
-) -> None:
-    """Show differences between local and remote PR/Issue descriptions and comments."""
-
-    # Determine if we should use color
-    use_color = False
-    if color == 'always':
-        use_color = True
-    elif color == 'auto':
-        use_color = sys.stdout.isatty()
-
-    # ANSI color codes
-    RED = '\033[31m' if use_color else ''
-    GREEN = '\033[32m' if use_color else ''
-    CYAN = '\033[36m' if use_color else ''
-    YELLOW = '\033[33m' if use_color else ''
-    RESET = '\033[0m' if use_color else ''
-    BOLD = '\033[1m' if use_color else ''
-
-    # Get PR info from current directory
-    owner, repo, pr_number = get_pr_info_from_path()
-
-    if not all([owner, repo, pr_number]):
-        # Try git config
-        try:
-            owner = proc.line('git', 'config', 'pr.owner', err_ok=True, log=None) or ''
-            repo = proc.line('git', 'config', 'pr.repo', err_ok=True, log=None) or ''
-            pr_number = proc.line('git', 'config', 'pr.number', err_ok=True, log=None) or ''
-        except Exception as e:
-            err(f"Error: Could not determine PR from directory or git config: {e}")
-            exit(1)
-
-    # Get item type
-    item_type = proc.line('git', 'config', 'pr.type', err_ok=True, log=None)
-
-    # Get remote PR/Issue data
-    item_label = 'issue' if item_type == 'issue' else 'PR'
-    err(f"Fetching {item_label} {owner}/{repo}#{pr_number}...")
-    pr_data, item_type = get_item_metadata(owner, repo, pr_number, item_type)
-    if not pr_data:
-        exit(1)
-
-    # Read local description from git
-    desc_content, desc_file = read_description_from_git('HEAD')
-    if not desc_content or not desc_file:
-        err("Error: Could not read description file from HEAD")
-        err("Make sure you've committed your changes")
-        exit(1)
-
-    # Parse local file to get title and body
-    lines = desc_content.split('\n')
-    if not lines:
-        err("Error: DESCRIPTION.md is empty")
-        exit(1)
-
-    first_line = lines[0].strip()
-    local_title = extract_title_from_first_line(first_line)
-
-    body_lines = lines[1:]
-    while body_lines and not body_lines[0].strip():
-        body_lines = body_lines[1:]
-    local_body = '\n'.join(body_lines).rstrip()
-
-    # Strip footer from local body for comparison
-    local_body_without_footer, _ = extract_gist_footer(local_body)
-
-    # Get remote title and body (already normalized in get_pr_metadata)
-    remote_title = pr_data['title']
-    remote_body = (pr_data['body'] or '').rstrip()
-
-    # Strip footer from remote body for comparison
-    remote_body_without_footer, _ = extract_gist_footer(remote_body)
-
-    # Compare titles
-    if local_title != remote_title:
-        err(f"\n{BOLD}{YELLOW}=== Title Differences ==={RESET}")
-        err(f"{GREEN}Local: {RESET} {local_title}")
-        err(f"{RED}Remote:{RESET} {remote_title}")
-    else:
-        err(f"\n{BOLD}{CYAN}=== Title: No differences ==={RESET}")
-
-    # Compare bodies (without footers)
-    if local_body_without_footer != remote_body_without_footer:
-        err(f"\n{BOLD}{YELLOW}=== Body Differences ==={RESET}")
-        render_unified_diff(
-            remote_body_without_footer,
-            local_body_without_footer,
-            fromfile='Remote PR',
-            tofile=f'Local {desc_file.name}',
-            use_color=use_color,
-            log=print
-        )
-    else:
-        err(f"\n{BOLD}{CYAN}=== Body: No differences ==={RESET}")
-
-    # Handle comment diffing (default enabled, skip if --no-comments)
-    if not no_comments:
-        # Get item type
-        item_type = proc.line('git', 'config', 'pr.type', err_ok=True, log=None)
-        if not item_type:
-            _, item_type = get_item_metadata(owner, repo, pr_number)
-
-        render_comment_diff(owner, repo, pr_number, item_type, use_color=use_color)
-
-
-@cli.command()
 @flag('-g', '--gist', help='Also sync to gist')
 @flag('-n', '--dry-run', help='Show what would be done')
 @opt('-f/-F', '--footer/--no-footer', default=None, help='Add gist footer to PR (default: auto - add if gist exists)')
@@ -2226,6 +1864,20 @@ def ingest_attachments(
 
     elif dry_run:
         err(f"[DRY-RUN] Would update {len(replacements)} reference(s)")
+
+
+# Register modular commands
+from .commands import shell_integration as shell_integration_cmd
+from .commands import show as show_cmd
+from .commands import open as open_cmd
+from .commands import upload as upload_cmd
+from .commands import diff as diff_cmd
+
+shell_integration_cmd.register(cli)
+show_cmd.register(cli)
+open_cmd.register(cli)
+upload_cmd.register(cli)
+diff_cmd.register(cli)
 
 
 if __name__ == '__main__':
