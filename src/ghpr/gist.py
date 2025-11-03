@@ -112,12 +112,22 @@ def extract_gist_footer(body: str | None) -> tuple[str | None, str | None]:
 
     lines = body.split('\n')
 
-    # Check for visible footer format (last 3 lines: empty, ---, "Synced with...")
-    if len(lines) >= 3:
-        if (lines[-3].strip() == '' and
-            lines[-2].strip() == '---' and
-            'Synced with [gist](' in lines[-1]):
-            # Extract URL from markdown link
+    # Check for visible footer format
+    # Be permissive: allow optional blank line before "Synced with..."
+    # Formats accepted:
+    #   - <empty>\n---\nSynced with... (3 lines)
+    #   - <empty>\n---\n<empty>\nSynced with... (4 lines)
+    if len(lines) >= 3 and 'Synced with [gist](' in lines[-1]:
+        # Check for format with extra blank line before "Synced with..."
+        if len(lines) >= 4 and lines[-2].strip() == '' and lines[-3].strip() == '---' and lines[-4].strip() == '':
+            match = GIST_FOOTER_VISIBLE_PATTERN.search(lines[-1])
+            if match:
+                gist_url = match.group(1)
+                # Remove the footer (last 4 lines)
+                body_without_footer = '\n'.join(lines[:-4]).rstrip()
+                return body_without_footer, gist_url
+        # Check for standard format without extra blank line
+        elif lines[-2].strip() == '---' and lines[-3].strip() == '':
             match = GIST_FOOTER_VISIBLE_PATTERN.search(lines[-1])
             if match:
                 gist_url = match.group(1)
