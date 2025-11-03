@@ -239,6 +239,71 @@ except ImportError:
         )
 
 
+def get_owner_repo(repo_arg: str | None = None) -> tuple[str, str]:
+    """Get owner and repo, trying multiple sources.
+
+    Tries in order:
+    1. Explicit -r/--repo argument (owner/repo format)
+    2. Git config (pr.owner, pr.repo)
+    3. Parent directory's GitHub repo
+    4. Current directory's git remotes (origin, then any)
+
+    Returns:
+        Tuple of (owner, repo)
+
+    Raises:
+        SystemExit if unable to determine repo
+    """
+    # Try explicit argument
+    if repo_arg:
+        if '/' in repo_arg:
+            parts = repo_arg.split('/')
+            if len(parts) == 2:
+                return parts[0], parts[1]
+        err(f"Error: Invalid repo format '{repo_arg}'. Use: owner/repo")
+        exit(1)
+
+    # Try git config
+    owner = proc.line('git', 'config', 'pr.owner', err_ok=True, log=None)
+    repo = proc.line('git', 'config', 'pr.repo', err_ok=True, log=None)
+    if owner and repo:
+        return owner, repo
+
+    # Try walking up to find a git repo with GitHub remote
+    current = Path.cwd()
+    for parent in [current] + list(current.parents):
+        if (parent / '.git').exists():
+            try:
+                with cd(parent):
+                    repo_data = proc.json('gh', 'repo', 'view', '--json', 'owner,name', log=None, err_ok=True)
+                    if repo_data:
+                        return repo_data['owner']['login'], repo_data['name']
+            except Exception:
+                pass
+            # Continue searching even if gh failed - might find a parent with GitHub remote
+
+    # Try current directory's git remotes
+    try:
+        remotes = proc.lines('git', 'remote', log=None, err_ok=True)
+        if remotes:
+            # Try 'origin' first
+            remote_to_try = 'origin' if 'origin' in remotes else remotes[0]
+            remote_url = proc.line('git', 'remote', 'get-url', remote_to_try, log=None, err_ok=True)
+            if remote_url:
+                from ghpr.patterns import GITHUB_URL_PATTERN
+                match = GITHUB_URL_PATTERN.search(remote_url)
+                if match:
+                    return match.group(1), match.group(2)
+    except Exception:
+        pass
+
+    err("Error: Could not determine repository.")
+    err("Specify with: -r owner/repo")
+    err("Or configure with: ghpr init -r owner/repo")
+    err("Or run from a directory with a GitHub remote")
+    exit(1)
+
+
 @group()
 def cli():
     """Clone and sync GitHub PR descriptions."""
@@ -296,17 +361,40 @@ def init(
         err("Error: DESCRIPTION.md already exists. Are you already managing a PR here?")
         exit(1)
 
+    # Get and store repo config BEFORE creating .git
+    if repo:
+        # Explicit repo provided
+        owner, repo_name = repo.split('/')
+    else:
+        # Try to auto-detect from parent directory's git repo
+        owner = None
+        repo_name = None
+        parent = Path('..').resolve()
+
+        # Walk up to find a git repo
+        for check_dir in [parent] + list(parent.parents):
+            if (check_dir / '.git').exists():
+                try:
+                    with cd(check_dir):
+                        repo_data = proc.json('gh', 'repo', 'view', '--json', 'owner,name', log=None, err_ok=True)
+                        if repo_data:
+                            owner = repo_data['owner']['login']
+                            repo_name = repo_data['name']
+                            err(f"Auto-detected repository: {owner}/{repo_name}")
+                            break
+                except Exception:
+                    pass
+
     # Initialize git repo if needed
     if not exists('.git'):
         proc.run('git', 'init', '-q', log=None)
         err("Initialized git repository")
 
-    # Store config if provided
-    if repo:
-        owner, repo_name = repo.split('/')
+    if owner and repo_name:
         proc.run('git', 'config', 'pr.owner', owner, log=None)
         proc.run('git', 'config', 'pr.repo', repo_name, log=None)
-        err(f"Configured for {repo}")
+        if repo:
+            err(f"Configured for {owner}/{repo_name}")
 
     if base:
         proc.run('git', 'config', 'pr.base', base, log=None)
@@ -329,23 +417,31 @@ def init(
 @opt('-b', '--base', help='Base branch (default: repo default branch)')
 @flag('-d', '--draft', help='Create as draft PR')
 @opt('-h', '--head', help='Head branch (default: auto-detect from parent repo)')
-@flag('-n', '--dry-run', help='Show what would be done without creating the PR')
-@flag('-w', '--web', help='Open PR in web browser after creating')
+@flag('-i', '--issue', help='Create an issue instead of a PR')
+@flag('-n', '--dry-run', help='Show what would be done without creating')
+@opt('-r', '--repo', help='Repository (owner/repo format, default: auto-detect)')
+@flag('-w', '--web', help='Open in web browser after creating')
 def create(
     head: str | None,
     base: str | None,
     draft: bool,
+    issue: bool,
+    repo: str | None,
     web: bool,
     dry_run: bool,
 ) -> None:
-    """Create a new PR from the current draft."""
-    create_new_pr(head, base, draft, web, dry_run)
+    """Create a new PR or Issue from the current draft."""
+    if issue:
+        create_new_issue(repo, web, dry_run)
+    else:
+        create_new_pr(head, base, draft, repo, web, dry_run)
 
 
 def create_new_pr(
     head: str | None,
     base: str | None,
     draft: bool,
+    repo_arg: str | None,
     web: bool,
     dry_run: bool,
 ) -> None:
@@ -508,41 +604,179 @@ def create_new_pr(
                     new_file = Path(new_filename)
 
                     if exists(old_file):
-                        with open(old_file, 'r') as f:
-                            lines = f.readlines()
+                        # Read title and body from DESCRIPTION.md
+                        title, body = read_description_file()
+                        if not title:
+                            err("Warning: Could not parse title from DESCRIPTION.md")
+                        else:
+                            # Write using helper with proper link reference format
+                            write_description_with_link_ref(
+                                new_file,
+                                owner,
+                                repo,
+                                pr_number,
+                                title,
+                                body or '',
+                                output
+                            )
 
-                        if lines:
-                            # Update first line to include PR link
-                            first_line = lines[0].strip()
-                            # Check if first line is an h1 (starts with #)
-                            if first_line.startswith('#'):
-                                # Check if it already has a PR link
-                                if not PR_LINK_IN_H1_PATTERN.match(first_line):
-                                    # Extract just the title (remove leading #)
-                                    title_only = first_line.lstrip('#').strip()
-                                    # Add PR link
-                                    lines[0] = f'# [{owner}/{repo}#{pr_number}]({output}) {title_only}\n'
+                            # Remove old file if different name
+                            if old_file != new_file:
+                                old_file.unlink()
+                                err(f"Renamed DESCRIPTION.md to {new_filename}")
 
-                                    with open(new_file, 'w') as f:
-                                        f.writelines(lines)
+                            # Commit the update
+                            proc.run('git', 'add', new_filename, log=None)
+                            if old_file != new_file:
+                                proc.run('git', 'rm', 'DESCRIPTION.md', log=None)
+                            proc.run('git', 'commit', '-m', f'Rename to {new_filename} and add PR #{pr_number} link', log=None)
+                            err(f"Updated {new_filename} with PR link")
 
-                                    # Remove old file if different name
-                                    if old_file != new_file:
-                                        old_file.unlink()
-                                        err(f"Renamed DESCRIPTION.md to {new_filename}")
+                            # Rename directory from gh/new to gh/{number}
+                            current_dir = Path.cwd()
+                            parent_dir = current_dir.parent
+                            current_name = current_dir.name
 
-                                    # Commit the update
-                                    proc.run('git', 'add', new_filename, log=None)
-                                    if old_file != new_file:
-                                        proc.run('git', 'rm', 'DESCRIPTION.md', log=None)
-                                    proc.run('git', 'commit', '-m', f'Rename to {new_filename} and add PR #{pr_number} link', log=None)
-                                    err(f"Updated {new_filename} with PR link")
-                            else:
-                                err(f"Warning: {old_file.name} first line is not an h1, skipping link update")
+                            # Check if we're in a gh/* subdirectory
+                            if parent_dir.name == 'gh' and current_name != pr_number:
+                                new_dir = parent_dir / pr_number
+                                if not new_dir.exists():
+                                    # Note: After this, our cwd will be invalid, but we're done anyway
+                                    import os
+                                    os.rename(str(current_dir), str(new_dir))
+                                    err(f"Renamed directory: gh/{current_name} → gh/{pr_number}")
+                                else:
+                                    err(f"Warning: Directory gh/{pr_number} already exists, not renaming")
                 else:
                     err(f"Created PR: {output}")
         except Exception as e:
             err(f"Error creating PR: {e}")
+            exit(1)
+
+
+def create_new_issue(
+    repo_arg: str | None,
+    web: bool,
+    dry_run: bool,
+) -> None:
+    """Create a new Issue from DESCRIPTION.md."""
+    # Read DESCRIPTION.md
+    if not exists('DESCRIPTION.md'):
+        err("Error: DESCRIPTION.md not found. Run 'ghpr init' first")
+        exit(1)
+
+    with open('DESCRIPTION.md', 'r') as f:
+        content = f.read()
+
+    lines = content.split('\n')
+    if not lines:
+        err("Error: DESCRIPTION.md is empty")
+        exit(1)
+
+    # Parse title from first line
+    first_line = lines[0].strip()
+    if first_line.startswith('#'):
+        title = first_line.lstrip('#').strip()
+        # Remove any [owner/repo#NUM] prefix if present
+        title = re.sub(r'^\[?[^/\]]+/[^#\]]+#\d+]?\s*', '', title)
+        title = re.sub(r'^[^/]+/[^#]+#\w+\s+', '', title)  # Handle owner/repo#NUMBER format
+    else:
+        title = first_line
+
+    # Get body (rest of the file)
+    body_lines = lines[1:]
+    while body_lines and not body_lines[0].strip():
+        body_lines = body_lines[1:]
+    body = '\n'.join(body_lines).strip()
+
+    # Get repo info
+    owner, repo = get_owner_repo(repo_arg)
+
+    # Create the issue
+    if dry_run:
+        err(f"[DRY-RUN] Would create issue in {owner}/{repo}")
+        err(f"  Title: {title}")
+        if body:
+            err(f"  Body ({len(body)} chars):")
+            # Show first few lines of body
+            body_preview = body[:500] + ('...' if len(body) > 500 else '')
+            for line in body_preview.split('\n')[:10]:
+                err(f"    {line}")
+    else:
+        cmd = ['gh', 'issue', 'create',
+               '-R', f'{owner}/{repo}',
+               '--title', title,
+               '--body', body]
+
+        if web:
+            cmd.append('--web')
+
+        try:
+            output = proc.text(*cmd, log=None).strip()
+            if not web:
+                # Extract issue number from URL
+                match = re.search(r'/issues/(\d+)', output)
+                if match:
+                    issue_number = match.group(1)
+                    # Store issue info in git config
+                    proc.run('git', 'config', 'pr.number', issue_number, log=None)
+                    proc.run('git', 'config', 'pr.type', 'issue', log=None)
+                    proc.run('git', 'config', 'pr.url', output, log=None)
+                    err(f"Created issue #{issue_number}: {output}")
+                    err("Issue info stored in git config")
+
+                    # Update DESCRIPTION.md with issue link
+                    old_file = Path('DESCRIPTION.md')
+                    new_filename = f'{repo}#{issue_number}.md'
+                    new_file = Path(new_filename)
+
+                    # Read title and body from DESCRIPTION.md
+                    title, body = read_description_file()
+                    if not title:
+                        err("Warning: Could not parse title from DESCRIPTION.md")
+                    else:
+                        # Write using helper with proper link reference format
+                        write_description_with_link_ref(
+                            new_file,
+                            owner,
+                            repo,
+                            issue_number,
+                            title,
+                            body or '',
+                            output
+                        )
+
+                        # Remove old file if different name
+                        if old_file != new_file:
+                            old_file.unlink()
+                            err(f"Renamed DESCRIPTION.md to {new_filename}")
+
+                        # Git operations
+                        proc.run('git', 'add', new_filename, log=None)
+                        if old_file != new_file:
+                            proc.run('git', 'rm', 'DESCRIPTION.md', log=None)
+                        proc.run('git', 'commit', '-m', f'Rename to {new_filename} and add issue #{issue_number} link', log=None)
+                        err(f"Updated {new_filename} with issue link")
+
+                        # Rename directory from gh/new to gh/{number}
+                        current_dir = Path.cwd()
+                        parent_dir = current_dir.parent
+                        current_name = current_dir.name
+
+                        # Check if we're in a gh/* subdirectory
+                        if parent_dir.name == 'gh' and current_name != issue_number:
+                            new_dir = parent_dir / issue_number
+                            if not new_dir.exists():
+                                # Note: After this, our cwd will be invalid, but we're done anyway
+                                import os
+                                os.rename(str(current_dir), str(new_dir))
+                                err(f"Renamed directory: gh/{current_name} → gh/{issue_number}")
+                            else:
+                                err(f"Warning: Directory gh/{issue_number} already exists, not renaming")
+            else:
+                err(f"Created issue: {output}")
+        except Exception as e:
+            err(f"Error creating issue: {e}")
             exit(1)
 
 
