@@ -6,7 +6,7 @@ This document provides context for Claude Code when continuing development on `g
 
 `ghpr` (GitHub PR) is a CLI tool for managing GitHub PRs and Issues locally with bidirectional sync and gist mirroring.
 
-**PyPI Package**: `ghpr-py` (reserved)
+**PyPI Package**: `ghpr-py` (published)
 **Repository**: https://github.com/runsascoded/ghpr
 **Command**: `ghpr`
 
@@ -31,9 +31,10 @@ The gist is a **read replica** of the local clone. `push`/`pull` operations sync
 - ✅ Draft comment workflow: `new*.md` → post → rename
 - ✅ Unified diff display between `diff` and `push -n`
 - ✅ Image upload command using `utz.git.gist`
-- ✅ PyPI name `ghpr-py` reserved
+- ✅ PyPI package `ghpr-py` published (v0.1.0)
 - ✅ Repository created with filtered history
-- ✅ Modular package structure
+- ✅ Modular package structure (commands in separate modules)
+- ✅ Using published `utz>=0.21.3` for git utilities
 
 ### File Structure (Current)
 ```
@@ -41,15 +42,28 @@ The gist is a **read replica** of the local clone. `push`/`pull` operations sync
 ├── pyproject.toml       # Package metadata
 ├── README.md
 ├── CLAUDE.md           # This file
+├── ghpr.py             # Standalone uv run script
 └── src/ghpr/
     ├── __init__.py
-    ├── cli.py          # Click command definitions
+    ├── cli.py          # Main CLI entry point, registers commands
     ├── api.py          # GitHub API helpers
     ├── gist.py         # Gist operations
     ├── comments.py     # Comment file read/write
     ├── files.py        # Description file operations
     ├── config.py       # Git config helpers
-    └── patterns.py     # Regex patterns
+    ├── patterns.py     # Regex patterns
+    ├── render.py       # Diff rendering utilities
+    └── commands/       # Modular command implementations
+        ├── clone.py
+        ├── create.py
+        ├── diff.py
+        ├── ingest_attachments.py
+        ├── open.py
+        ├── pull.py
+        ├── push.py
+        ├── shell_integration.py
+        ├── show.py
+        └── upload.py
 ```
 
 ### Recent Changes
@@ -138,8 +152,8 @@ ghpr clone https://github.com/marin-community/marin/issues/1773
 
 ```toml
 dependencies = [
-    "click>=8.0",   # CLI framework
-    "utz>=0.1.0",   # Subprocess and utility helpers
+    "click>=8.0",    # CLI framework
+    "utz>=0.21.3",   # Subprocess and git utility helpers
 ]
 ```
 
