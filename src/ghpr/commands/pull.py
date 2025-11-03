@@ -22,7 +22,7 @@ def pull(
 ) -> None:
     """Pull latest description and comments from GitHub PR/Issue."""
     # Import push here to avoid circular dependency
-    from ..cli import push as push_cmd
+    from . import push as push_module
 
     # First pull
     err("Pulling latest from PR...")
@@ -130,7 +130,7 @@ def pull(
     err("Pushing to PR...")
     # Convert pull's footer boolean to push's footer count
     footer_count = 1 if footer else 0 if footer is False else 0
-    push_cmd.callback(gist, dry_run, footer_count, no_footer=False, open_browser=open_browser, images=False, gist_private=gist_private, no_comments=no_comments, force_others=False)
+    push_module.push(gist, dry_run, footer_count, no_footer=False, open_browser=open_browser, images=False, gist_private=gist_private, no_comments=no_comments, force_others=False)
 
 
 def register(cli):
