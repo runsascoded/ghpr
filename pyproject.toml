@@ -25,7 +25,7 @@ classifiers = [
 ]
 dependencies = [
     "click>=8.0",
-    "utz>=0.21.2",
+    "utz>=0.21.3",
 ]
 
 [project.optional-dependencies]

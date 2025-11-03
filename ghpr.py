@@ -3,7 +3,7 @@
 # requires-python = ">=3.10"
 # dependencies = [
 #     "click",
-#     "utz",
+#     "utz>=0.21.3",
 # ]
 # ///
 """Clone and sync GitHub PR descriptions with local folders and GitHub gists."""
