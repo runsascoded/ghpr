@@ -9,14 +9,14 @@ from utz.cli import opt, flag
 from ..files import read_description_file, write_description_with_link_ref
 from ..patterns import GIST_ID_PATTERN
 
-# Try to import git_helpers, but it's OK if not available
+# Import resolve_remote_ref from utz
 try:
-    from git_helpers.util.branch_resolution import resolve_remote_ref
+    from utz.git.branch import resolve_remote_ref
 except ImportError:
     # Fallback: define a stub that raises an informative error
     def resolve_remote_ref(verbose=False):
         raise ImportError(
-            "git_helpers not available. Install it or specify --head explicitly."
+            "utz.git.branch.resolve_remote_ref not available. Update utz or specify --head explicitly."
         )
 
 
