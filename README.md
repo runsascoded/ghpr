@@ -19,6 +19,8 @@ pip install ghpr-py
 
 ## Usage
 
+### Basic Workflow
+
 ```bash
 # Clone a PR or issue
 ghpr clone https://github.com/owner/repo/pull/123
@@ -30,9 +32,35 @@ ghpr diff
 
 # Push changes
 ghpr push
+```
 
-# Add a new comment
-ghpr comment my-draft.md
+### Adding Comments
+
+To add a new comment, create a file starting with `new` and ending in `.md`:
+
+```bash
+# Create a draft comment
+echo "My comment text" > new.md
+
+# Commit it
+git add new.md
+git commit -m "Draft comment"
+
+# Push to GitHub (posts the comment and renames to z{id}-{author}.md)
+ghpr push
+```
+
+The `push` command will:
+1. Post `new*.md` files as comments to GitHub
+2. Create a commit renaming them to `z{comment_id}-{author}.md`
+3. Sync to the gist mirror
+
+### Uploading Images
+
+```bash
+# Upload image(s) to the gist and get markdown URLs
+ghpr upload screenshot.png
+# Output: ![screenshot.png](https://gist.githubusercontent.com/...)
 ```
 
 ## Directory Structure
