@@ -1158,8 +1158,11 @@ def push(
 
                     # Post as new comment
                     err(f"Posting {draft_file} as new comment...")
+                    # Strip content to avoid trailing whitespace issues
+                    clean_content = draft_content.strip()
+
                     with NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-                        f.write(draft_content)
+                        f.write(clean_content)
                         temp_file = f.name
 
                     try:
@@ -1167,8 +1170,7 @@ def push(
                             'gh', 'api',
                             '-X', 'POST',
                             f'repos/{owner}/{repo}/issues/{number}/comments',
-                            '--input', temp_file,
-                            '-f', 'body=@-',
+                            '-F', f'body=@{temp_file}',
                             log=False
                         )
                         comment_id = str(result['id'])
@@ -1176,7 +1178,7 @@ def push(
                         updated_at = result.get('updated_at', created_at)
 
                         # Create the z{id}-{author}.md file
-                        comment_file = write_comment_file(comment_id, current_user, created_at, updated_at, draft_content.strip())
+                        comment_file = write_comment_file(comment_id, current_user, created_at, updated_at, clean_content)
                         new_filename = comment_file.name
 
                         err(f"Posted comment {comment_id}, created {new_filename}")
@@ -1257,7 +1259,7 @@ def push(
 
                             proc.run('gh', 'api', '-X', 'PATCH',
                                     f'repos/{owner}/{repo}/issues/comments/{comment_id}',
-                                    '-f', f'body=@{temp_file}', log=None)
+                                    '-F', f'body=@{temp_file}', log=None)
                             unlink(temp_file)
                             err(f"Updated comment {comment_id}")
                             comments_pushed += 1

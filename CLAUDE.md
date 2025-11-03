@@ -111,13 +111,12 @@ Comment body here...
 # Fetch comments
 comments = proc.json('gh', 'api', f'repos/{owner}/{repo}/issues/{number}/comments', log=False)
 
-# Post comment (use --input with body=@- to read from file)
+# Post comment (use -F with body=@file to read from file)
 result = proc.json(
     'gh', 'api',
     '-X', 'POST',
     f'repos/{owner}/{repo}/issues/{number}/comments',
-    '--input', temp_file,
-    '-f', 'body=@-',
+    '-F', f'body=@{temp_file}',
     log=False
 )
 ```
