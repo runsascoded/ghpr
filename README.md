@@ -2,6 +2,8 @@
 
 "Clone" GitHub PRs/issues, locally edit title/description/comments, "push" back to GitHub, and mirror to Gists.
 
+[![ghpr-py](https://img.shields.io/pypi/v/ghpr-py?label=ghpr-py)](https://pypi.org/project/ghpr-py/)
+
 - Sometimes PR and issue descriptions/comments warrant more complex editing than GitHub's web UI comfortably allows.
 - `ghpr` lets you "clone" PRs and issues locally as Markdown files (including titles and comments), so you can edit them with your favorite IDE, then "push" updates back to GitHub.
 - `ghpr` also mirrors PR/issue content to Gists, for version control and easy sharing / backing up / syncing across machines.
