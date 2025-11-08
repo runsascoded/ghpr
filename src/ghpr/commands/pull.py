@@ -58,20 +58,16 @@ def pull(
     # Write using helper to avoid duplicate link definitions
     write_description_with_link_ref(desc_file, owner, repo, pr_number, title, body_without_footer, url)
 
-    # Check if there are changes
+    # Check if there are changes to description
     item_label = 'issue' if item_type == 'issue' else 'PR'
-    if proc.check('git', 'diff', '--exit-code', desc_filename, log=None):
-        err(f"No changes from {item_label}")
-    else:
-        # There are changes, commit them
-        if not dry_run:
-            proc.run('git', 'add', desc_filename, log=None)
-            proc.run('git', 'commit', '-m', f'Sync from {item_label} (pulled latest)', log=None)
-            err(f"Pulled and committed changes from {item_label}")
-        else:
-            err(f"[DRY-RUN] Would pull and commit changes from {item_label}")
+    desc_changed = not proc.check('git', 'diff', '--exit-code', desc_filename, log=None)
+    if desc_changed:
+        proc.run('git', 'add', desc_filename, log=None)
+        err(f"Description updated from {item_label}")
 
     # Sync comments (default enabled, skip if --no-comments)
+    new_comments = 0
+    updated_comments = 0
     if not no_comments:
         err("Syncing comments from remote...")
         # Get item type
@@ -84,9 +80,6 @@ def pull(
             existing_files = glob('z*.md')
             # Map comment ID to filename
             existing_id_to_file = {get_comment_id_from_filename(f): f for f in existing_files if get_comment_id_from_filename(f)}
-
-            new_comments = 0
-            updated_comments = 0
 
             for comment in remote_comments:
                 comment_id = str(comment['id'])
@@ -119,22 +112,34 @@ def pull(
                         proc.run('git', 'add', str(comment_file), log=None)
                         new_comments += 1
 
-            if new_comments > 0 or updated_comments > 0:
-                if dry_run:
-                    err(f"[DRY-RUN] Would commit {new_comments} new, {updated_comments} updated comments")
-                else:
-                    msg_parts = []
-                    if new_comments > 0:
-                        msg_parts.append(f'{new_comments} new')
-                    if updated_comments > 0:
-                        msg_parts.append(f'{updated_comments} updated')
-                    commit_msg = f'Pull comments: {", ".join(msg_parts)}'
-                    proc.run('git', 'commit', '-m', commit_msg, log=None)
-                    err(f"Pulled comments: {new_comments} new, {updated_comments} updated")
-            else:
+            if new_comments > 0:
+                err(f"Found {new_comments} new comment(s)")
+            if updated_comments > 0:
+                err(f"Found {updated_comments} updated comment(s)")
+            if new_comments == 0 and updated_comments == 0:
                 err("All comments are up to date")
         else:
             err("No comments found remotely")
+
+    # Create single commit with all changes (description + comments)
+    if desc_changed or new_comments > 0 or updated_comments > 0:
+        if not dry_run:
+            # Build commit message
+            msg_parts = []
+            if desc_changed:
+                msg_parts.append('description')
+            if new_comments > 0:
+                msg_parts.append(f'{new_comments} new comment(s)')
+            if updated_comments > 0:
+                msg_parts.append(f'{updated_comments} updated comment(s)')
+
+            commit_msg = f'Pull from {item_label}: {", ".join(msg_parts)}'
+            proc.run('git', 'commit', '-m', commit_msg, log=None)
+            err(f"Committed changes from {item_label}")
+        else:
+            err(f"[DRY-RUN] Would commit changes from {item_label}")
+    else:
+        err(f"No changes from {item_label}")
 
     # Now push our version back
     err(f"Pushing to {item_label}...")
