@@ -347,11 +347,20 @@ def create_new_pr(
         if exists(join(parent_dir, '.git')):
             try:
                 with cd(parent_dir):
-                    # Use branch resolution
+                    # Use branch resolution to get remote tracking branch
                     ref_name, remote_ref = resolve_remote_ref(verbose=False)
-                    if ref_name:
+                    if remote_ref:
+                        # Extract branch name from remote_ref (e.g., "m/rw/ws3" -> "rw/ws3")
+                        # GitHub expects just the branch name without the remote prefix
+                        if '/' in remote_ref:
+                            head = '/'.join(remote_ref.split('/')[1:])
+                        else:
+                            head = remote_ref
+                        err(f"Auto-detected head branch from remote: {head}")
+                    elif ref_name:
+                        # Fallback to local branch name if no remote tracking
                         head = ref_name
-                        err(f"Auto-detected head branch: {head}")
+                        err(f"Auto-detected head branch (local): {head}")
 
                     if not head:
                         # Fallback to current branch
