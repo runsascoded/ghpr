@@ -31,8 +31,8 @@ def shell_integration(shell: str | None) -> None:
         else:
             shell = 'bash'  # default
 
-    # Get the package directory
-    pkg_dir = Path(__file__).parent.parent.parent.parent
+    # Get the shell files from the ghpr package
+    pkg_dir = Path(__file__).parent.parent
     shell_file = pkg_dir / 'shell' / f'ghpr.{shell if shell != "zsh" else "bash"}'
 
     if shell_file.exists():
