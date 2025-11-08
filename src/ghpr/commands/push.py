@@ -625,24 +625,16 @@ def sync_to_gist(
 
 def register(cli):
     """Register command with CLI."""
-    cli.command()(
-        flag('-g', '--gist', help='Also sync to gist')(
-            flag('-n', '--dry-run', help='Show what would be done without making changes')(
-                opt('-f', '--footer', count=True, help='Footer level: -f = hidden footer, -ff = visible footer')(
-                    flag('-F', '--no-footer', help='Disable footer completely')(
-                        flag('-o', '--open', 'open_browser', help='Open PR in browser after pushing')(
-                            flag('-i', '--images', help='Upload local images and replace references')(
-                                opt('-p/-P', '--private/--public', 'gist_private', default=None, help='Gist visibility: -p = private, -P = public (default: match repo visibility)')(
-                                    flag('--no-comments', help='Skip pushing comment changes')(
-                                        flag('-C', '--force-others', help='Allow pushing edits to other users\' comments (may fail at API level)')(
-                                            push
-                                        )
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-            )
-        )
-    )
+
+    @cli.command()
+    @flag('-C', '--force-others', help='Allow pushing edits to other users\' comments (may fail at API level)')
+    @flag('--no-comments', help='Skip pushing comment changes')
+    @opt('-p/-P', '--private/--public', 'gist_private', default=None, help='Gist visibility: -p = private, -P = public (default: match repo visibility)')
+    @flag('-i', '--images', help='Upload local images and replace references')
+    @flag('-o', '--open', 'open_browser', help='Open PR in browser after pushing')
+    @flag('-F', '--no-footer', help='Disable footer completely')
+    @opt('-f', '--footer', count=True, help='Footer level: -f = hidden footer, -ff = visible footer')
+    @flag('-n', '--dry-run', help='Show what would be done without making changes')
+    @flag('-g', '--gist', help='Also sync to gist')
+    def push_cmd(force_others, no_comments, gist_private, images, open_browser, no_footer, footer, dry_run, gist):
+        push(gist, dry_run, footer, no_footer, open_browser, images, gist_private, no_comments, force_others)

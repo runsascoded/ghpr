@@ -150,18 +150,13 @@ def pull(
 
 def register(cli):
     """Register command with CLI."""
-    cli.command()(
-        flag('-g', '--gist', help='Also sync to gist')(
-            flag('-n', '--dry-run', help='Show what would be done')(
-                opt('-f/-F', '--footer/--no-footer', default=None, help='Add gist footer to PR (default: auto - add if gist exists)')(
-                    flag('-o', '--open', 'open_browser', help='Open PR in browser after pulling')(
-                        opt('-p/-P', '--private/--public', 'gist_private', default=None, help='Gist visibility: -p = private, -P = public (default: match repo visibility)')(
-                            flag('--no-comments', help='Skip syncing comments')(
-                                pull
-                            )
-                        )
-                    )
-                )
-            )
-        )
-    )
+
+    @cli.command()
+    @flag('--no-comments', help='Skip syncing comments')
+    @opt('-p/-P', '--private/--public', 'gist_private', default=None, help='Gist visibility: -p = private, -P = public (default: match repo visibility)')
+    @flag('-o', '--open', 'open_browser', help='Open PR in browser after pulling')
+    @opt('-f/-F', '--footer/--no-footer', default=None, help='Add gist footer to PR (default: auto - add if gist exists)')
+    @flag('-n', '--dry-run', help='Show what would be done')
+    @flag('-g', '--gist', help='Also sync to gist')
+    def pull_cmd(no_comments, gist_private, open_browser, footer, dry_run, gist):
+        pull(gist, dry_run, footer, open_browser, gist_private, no_comments)

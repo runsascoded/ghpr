@@ -45,8 +45,8 @@ def shell_integration(shell: str | None) -> None:
 
 def register(cli):
     """Register command with CLI."""
-    cli.command(name='shell-integration')(
-        arg('shell', type=Choice(['bash', 'zsh', 'fish']), required=False)(
-            shell_integration
-        )
-    )
+
+    @cli.command(name='shell-integration')
+    @arg('shell', type=Choice(['bash', 'zsh', 'fish']), required=False)
+    def shell_integration_cmd(shell):
+        shell_integration(shell)

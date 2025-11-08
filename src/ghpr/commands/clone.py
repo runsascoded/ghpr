@@ -267,14 +267,11 @@ def clone(
 
 def register(cli):
     """Register command with CLI."""
-    cli.command()(
-        opt('-d', '--directory', help='Directory to clone into (default: gh/{number})')(
-            flag('-G', '--no-gist', help='Skip creating a gist')(
-                flag('--no-comments', help='Skip cloning comments')(
-                    arg('spec', required=False)(
-                        clone
-                    )
-                )
-            )
-        )
-    )
+
+    @cli.command()
+    @arg('spec', required=False)
+    @flag('--no-comments', help='Skip cloning comments')
+    @flag('-G', '--no-gist', help='Skip creating a gist')
+    @opt('-d', '--directory', help='Directory to clone into (default: gh/{number})')
+    def clone_cmd(spec, no_comments, no_gist, directory):
+        clone(spec, directory, no_gist, no_comments)

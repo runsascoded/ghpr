@@ -122,11 +122,9 @@ def diff(
 
 def register(cli):
     """Register command with CLI."""
-    cli.command()(
-        opt('-c', '--color', type=Choice(['auto', 'always', 'never']), default='auto',
-            help='When to use colored output (default: auto)')(
-            flag('--no-comments', help='Skip diffing comments')(
-                diff
-            )
-        )
-    )
+
+    @cli.command()
+    @flag('--no-comments', help='Skip diffing comments')
+    @opt('-c', '--color', type=Choice(['auto', 'always', 'never']), default='auto', help='When to use colored output (default: auto)')
+    def diff_cmd(no_comments, color):
+        diff(color, no_comments)

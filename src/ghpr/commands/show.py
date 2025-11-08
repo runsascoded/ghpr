@@ -71,8 +71,8 @@ def show(gist: bool) -> None:
 
 def register(cli):
     """Register command with CLI."""
-    cli.command()(
-        flag('-g', '--gist', help='Only show gist URL')(
-            show
-        )
-    )
+
+    @cli.command()
+    @flag('-g', '--gist', help='Only show gist URL')
+    def show_cmd(gist):
+        show(gist)

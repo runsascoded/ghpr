@@ -645,30 +645,22 @@ def create_new_issue(
 
 def register(cli):
     """Register commands with CLI."""
+
     # Register init command
-    cli.command()(
-        opt('-r', '--repo', help='Repository (owner/repo format)')(
-            opt('-b', '--base', help='Base branch (default: repo default branch)')(
-                init
-            )
-        )
-    )
+    @cli.command()
+    @opt('-r', '--repo', help='Repository (owner/repo format)')
+    @opt('-b', '--base', help='Base branch (default: repo default branch)')
+    def init_cmd(repo, base):
+        init(repo, base)
 
     # Register create command
-    cli.command(help='Create PR/Issue (default: web editor; use -y for API mode)')(
-        opt('-b', '--base', help='Base branch (default: repo default branch)')(
-            flag('-d', '--draft', help='Create as draft PR (requires -y; incompatible with web editor)')(
-                opt('-h', '--head', help='Head branch (default: auto-detect from parent repo)')(
-                    flag('-i', '--issue', help='Create an issue instead of a PR')(
-                        flag('-n', '--dry-run', help='Show what would be done without creating')(
-                            opt('-r', '--repo', help='Repository (owner/repo format, default: auto-detect)')(
-                                opt('-y', '--yes', count=True, default=0, help='Skip web editor: -y = create via API then view, -yy = create silently (default: interactive web editor)')(
-                                    create
-                                )
-                            )
-                        )
-                    )
-                )
-            )
-        )
-    )
+    @cli.command(name='create', help='Create PR/Issue (default: web editor; use -y for API mode)')
+    @opt('-y', '--yes', count=True, default=0, help='Skip web editor: -y = create via API then view, -yy = create silently (default: interactive web editor)')
+    @opt('-r', '--repo', help='Repository (owner/repo format, default: auto-detect)')
+    @flag('-n', '--dry-run', help='Show what would be done without creating')
+    @flag('-i', '--issue', help='Create an issue instead of a PR')
+    @opt('-h', '--head', help='Head branch (default: auto-detect from parent repo)')
+    @flag('-d', '--draft', help='Create as draft PR (requires -y; incompatible with web editor)')
+    @opt('-b', '--base', help='Base branch (default: repo default branch)')
+    def create_cmd(yes, repo, dry_run, issue, head, draft, base):
+        create(head, base, draft, issue, repo, yes, dry_run)
