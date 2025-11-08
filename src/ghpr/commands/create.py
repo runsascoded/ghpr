@@ -257,19 +257,61 @@ def init(
 
         # Create initial DESCRIPTION.md
         with open('DESCRIPTION.md', 'w') as f:
-            if repo:
-                f.write(f"# {repo}#NUMBER Title\n\n")
+            if owner and repo_name:
+                f.write(f"# [{owner}/{repo_name}#XXXX] Title\n\n")
+                f.write("Description of the PR...\n\n")
+                f.write(f"[{owner}/{repo_name}#XXXX]: https://github.com/{owner}/{repo_name}/pull/XXXX\n")
             else:
-                f.write("# owner/repo#NUMBER Title\n\n")
-            f.write("Description of the PR...\n")
+                f.write("# [owner/repo#XXXX] Title\n\n")
+                f.write("Description of the PR...\n\n")
+                f.write("[owner/repo#XXXX]: https://github.com/owner/repo/pull/XXXX\n")
 
         err("Created DESCRIPTION.md template")
+
+        # Create initial commit
+        proc.run('git', 'add', 'DESCRIPTION.md', log=None)
+        proc.run('git', 'commit', '-m', 'Initial PR draft', log=None)
+        err("Created initial commit")
+
+        # Create and configure gist mirror
+        from ..gist import create_gist
+        try:
+            # Create gist (public by default, matching typical repo visibility)
+            description = f'Draft PR for {owner}/{repo_name}' if owner and repo_name else 'Draft PR'
+            gist_id = create_gist(
+                file_path='DESCRIPTION.md',
+                description=description,
+                is_public=True,
+                store_id=True  # Automatically stores in git config pr.gist
+            )
+
+            if gist_id:
+                # Add gist as remote
+                gist_url = f'git@gist.github.com:{gist_id}.git'
+                proc.run('git', 'remote', 'add', 'g', gist_url, log=None)
+                proc.run('git', 'config', 'pr.gist-remote', 'g', log=None)
+                err(f"Created gist: https://gist.github.com/{gist_id}")
+                err("Added remote 'g' for gist mirror")
+
+                # Fetch and set up tracking
+                proc.run('git', 'fetch', 'g', log=None)
+                proc.run('git', 'branch', '--set-upstream-to=g/main', 'main', log=None)
+                err("Configured main branch to track g/main")
+
+                # Push initial commit to gist (with history)
+                proc.run('git', 'push', '-f', 'g', 'main', log=None)
+                err("Pushed initial commit to gist")
+        except Exception as e:
+            err(f"Warning: Could not create gist mirror: {e}")
+            err("You can add it later with 'ghpr push -g'")
+
+        # End of cd(new_dir) context - we're done working in gh/new/
 
     err("")
     err("Next steps:")
     err("  cd gh/new")
     err("  vim DESCRIPTION.md  # Edit title and description")
-    err("  git add DESCRIPTION.md && git commit -m 'Draft PR'")
+    err("  git commit -am 'Update PR description'")
     err("  ghpr create")
 
 
