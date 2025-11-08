@@ -79,6 +79,15 @@ def write_description_with_link_ref(
     pr_ref = f'{owner}/{repo}#{pr_number}'
     link_def = f'[{pr_ref}]: {url}'
 
+    # Remove any placeholder link definitions from body (e.g., [owner/repo#XXXX], [owner/repo#NUMBER])
+    if body:
+        # Pattern to match placeholder link definitions
+        placeholder_pattern = re.compile(
+            r'^\[' + re.escape(f'{owner}/{repo}') + r'#(XXXX|XX|[Nn][Uu][Mm][Bb][Ee][Rr])\]:[^\n]*\n?',
+            re.MULTILINE
+        )
+        body = placeholder_pattern.sub('', body)
+
     # Check if the link def already exists in the body
     pr_link_pattern = re.compile(r'^\[' + re.escape(pr_ref) + r']:', re.MULTILINE)
     link_exists = pr_link_pattern.search(body) if body else False
@@ -127,6 +136,8 @@ def read_description_file(path: Path = None) -> tuple[str | None, str | None]:
     if match:
         # This is link-reference style, get the title
         title = match.group(2).strip()
+        # Strip any placeholder prefix like [owner/repo#XXXX] or [owner/repo#NUMBER]
+        title = re.sub(r'^\[?[^/\]]+/[^#\]]+#(XXXX|XX|[Nn][Uu][Mm][Bb][Ee][Rr]|\d+)]?\s*', '', title)
         # Find where the body starts (skip first line and blank lines)
         body_lines = []
         in_body = False
