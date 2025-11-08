@@ -3,7 +3,9 @@
 # Or use: eval "$(ghpr shell-integration bash)"
 
 # Core ghpr aliases for common operations
-alias ghpri='ghpr init'                # initialize new PR draft
+ghpri() {                              # initialize new PR draft and cd to gh/new
+    ghpr init "$@" && cd gh/new
+}
 alias ghpro='ghpr open'                # open existing PR in browser
 alias ghprog='ghpr open -g'            # open gist in browser
 alias ghprcr='ghpr create'             # create new PR from description

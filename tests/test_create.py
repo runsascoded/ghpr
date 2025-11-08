@@ -32,15 +32,17 @@ class TestInit:
                 assert any('pr.owner' in call and 'test-owner' in call for call in config_calls)
                 assert any('pr.repo' in call and 'test-repo' in call for call in config_calls)
 
-                # Check DESCRIPTION.md was created
-                assert Path('DESCRIPTION.md').exists()
+                # Check gh/new/ directory and DESCRIPTION.md were created
+                assert Path('gh/new').is_dir()
+                assert Path('gh/new/DESCRIPTION.md').exists()
 
     def test_init_already_initialized(self, tmp_path):
-        """Test init fails when DESCRIPTION.md exists."""
+        """Test init fails when gh/new/DESCRIPTION.md exists."""
         runner = CliRunner()
 
         with runner.isolated_filesystem(temp_dir=tmp_path):
-            Path('DESCRIPTION.md').write_text('# Test\n')
+            Path('gh/new').mkdir(parents=True)
+            Path('gh/new/DESCRIPTION.md').write_text('# Test\n')
 
             result = runner.invoke(cli, ['init'])
             assert result.exit_code != 0

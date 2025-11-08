@@ -203,24 +203,29 @@ def init(
     repo: str | None,
     base: str | None,
 ) -> None:
-    """Initialize a new PR draft in the current directory."""
-    # Check if we're already in a PR directory
-    if exists('DESCRIPTION.md'):
-        err("Error: DESCRIPTION.md already exists. Are you already managing a PR here?")
-        exit(1)
+    """Initialize a new PR draft in gh/new/ directory."""
+    # Create gh/new/ directory
+    new_dir = Path('gh/new')
+    if new_dir.exists():
+        if (new_dir / 'DESCRIPTION.md').exists():
+            err("Error: gh/new/DESCRIPTION.md already exists. Are you already managing a PR here?")
+            exit(1)
+    else:
+        new_dir.mkdir(parents=True)
+        err("Created gh/new/")
 
     # Get and store repo config BEFORE creating .git
     if repo:
         # Explicit repo provided
         owner, repo_name = repo.split('/')
     else:
-        # Try to auto-detect from parent directory's git repo
+        # Try to auto-detect from current directory or parent's git repo
         owner = None
         repo_name = None
-        parent = Path('..').resolve()
+        current = Path.cwd()
 
-        # Walk up to find a git repo
-        for check_dir in [parent] + list(parent.parents):
+        # Walk up to find a git repo (starting from current dir)
+        for check_dir in [current] + list(current.parents):
             if (check_dir / '.git').exists():
                 try:
                     with cd(check_dir):
@@ -233,32 +238,39 @@ def init(
                 except Exception:
                     pass
 
-    # Initialize git repo if needed
-    if not exists('.git'):
-        proc.run('git', 'init', '-q', log=None)
-        err("Initialized git repository")
+    # Work inside gh/new/
+    with cd(new_dir):
+        # Initialize git repo if needed
+        if not exists('.git'):
+            proc.run('git', 'init', '-q', log=None)
+            err("Initialized git repository")
 
-    if owner and repo_name:
-        proc.run('git', 'config', 'pr.owner', owner, log=None)
-        proc.run('git', 'config', 'pr.repo', repo_name, log=None)
-        if repo:
-            err(f"Configured for {owner}/{repo_name}")
+        if owner and repo_name:
+            proc.run('git', 'config', 'pr.owner', owner, log=None)
+            proc.run('git', 'config', 'pr.repo', repo_name, log=None)
+            if repo:
+                err(f"Configured for {owner}/{repo_name}")
 
-    if base:
-        proc.run('git', 'config', 'pr.base', base, log=None)
-        err(f"Base branch: {base}")
+        if base:
+            proc.run('git', 'config', 'pr.base', base, log=None)
+            err(f"Base branch: {base}")
 
-    # Create initial DESCRIPTION.md
-    with open('DESCRIPTION.md', 'w') as f:
-        if repo:
-            f.write(f"# {repo}#NUMBER Title\n\n")
-        else:
-            f.write("# owner/repo#NUMBER Title\n\n")
-        f.write("Description of the PR...\n")
+        # Create initial DESCRIPTION.md
+        with open('DESCRIPTION.md', 'w') as f:
+            if repo:
+                f.write(f"# {repo}#NUMBER Title\n\n")
+            else:
+                f.write("# owner/repo#NUMBER Title\n\n")
+            f.write("Description of the PR...\n")
 
-    err("Created DESCRIPTION.md template")
-    err("Edit the file with your PR title and description, then commit")
-    err("Use 'ghpr create' to create the PR when ready")
+        err("Created DESCRIPTION.md template")
+
+    err("")
+    err("Next steps:")
+    err("  cd gh/new")
+    err("  vim DESCRIPTION.md  # Edit title and description")
+    err("  git add DESCRIPTION.md && git commit -m 'Draft PR'")
+    err("  ghpr create")
 
 
 def create(

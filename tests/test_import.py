@@ -62,7 +62,7 @@ def test_shell_integration_outputs():
         text=True,
     )
     assert result.returncode == 0
-    assert "alias ghpri=" in result.stdout
+    assert "ghpri()" in result.stdout  # ghpri is now a function, not alias
     assert "alias ghprc=" in result.stdout
 
 
