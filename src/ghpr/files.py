@@ -113,8 +113,17 @@ def write_description_with_link_ref(
             f.write(f'{link_def}\n')
 
 
-def read_description_file(path: Path = None) -> tuple[str | None, str | None]:
-    """Read and parse description file."""
+def read_description_file(path: Path = None, expect_plain: bool = False) -> tuple[str | None, str | None]:
+    """Read and parse description file.
+
+    Args:
+        path: Directory containing description file (defaults to cwd)
+        expect_plain: If True, expect plain "# Title" format (pre-creation).
+                     If False, try link-reference formats first (post-creation).
+
+    Returns:
+        Tuple of (title, body)
+    """
     desc_file = find_description_file(path)
     if not desc_file:
         return None, None
@@ -126,11 +135,27 @@ def read_description_file(path: Path = None) -> tuple[str | None, str | None]:
     if not lines:
         return None, None
 
-    # First line should be:
-    # - # [owner/repo#123] Title (link-reference style)
-    # - # [owner/repo#123](url) Title (inline link style)
     first_line = lines[0].strip()
 
+    if expect_plain:
+        # Pre-creation: expect plain "# Title" format only
+        match = H1_TITLE_PATTERN.match(first_line)
+        if match:
+            title = match.group(1).strip()
+            body_lines = lines[1:]
+            while body_lines and not body_lines[0].strip():
+                body_lines = body_lines[1:]
+            body = '\n'.join(body_lines).rstrip()
+            return title, body
+
+        # If we find a link-reference format when expecting plain, that's an error
+        if PR_LINK_REF_PATTERN.match(first_line) or PR_INLINE_LINK_PATTERN.match(first_line):
+            err(f"Error: Expected plain format but found link-reference format in {desc_file.name}")
+            exit(1)
+
+        return None, None
+
+    # Post-creation: try link-reference formats first
     # Try link-reference style first (preferred)
     match = PR_LINK_REF_PATTERN.match(first_line)
     if match:

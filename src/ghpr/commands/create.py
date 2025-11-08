@@ -96,7 +96,7 @@ def _parse_github_url(url: str) -> tuple[str | None, str | None]:
 
 
 def _read_and_parse_description() -> tuple[str, str]:
-    """Read DESCRIPTION.md and parse title and body.
+    """Read DESCRIPTION.md and parse title and body (expects plain format).
 
     Returns:
         (title, body) tuple
@@ -105,31 +105,13 @@ def _read_and_parse_description() -> tuple[str, str]:
         err("Error: DESCRIPTION.md not found. Run 'ghpr init' first")
         exit(1)
 
-    with open('DESCRIPTION.md', 'r') as f:
-        content = f.read()
-
-    lines = content.split('\n')
-    if not lines:
-        err("Error: DESCRIPTION.md is empty")
+    # Read plain format (pre-creation)
+    title, body = read_description_file(expect_plain=True)
+    if not title:
+        err("Error: Could not parse DESCRIPTION.md")
         exit(1)
 
-    # Parse title from first line
-    first_line = lines[0].strip()
-    if first_line.startswith('#'):
-        title = first_line.lstrip('#').strip()
-        # Remove any [owner/repo#NUM] prefix if present
-        title = re.sub(r'^\[?[^/\]]+/[^#\]]+#\d+]?\s*', '', title)
-        title = re.sub(r'^[^/]+/[^#]+#\w+\s+', '', title)  # Handle owner/repo#NUMBER format
-    else:
-        title = first_line
-
-    # Get body (rest of the file)
-    body_lines = lines[1:]
-    while body_lines and not body_lines[0].strip():
-        body_lines = body_lines[1:]
-    body = '\n'.join(body_lines).strip()
-
-    return title, body
+    return title, body or ''
 
 
 def _finalize_created_item(
@@ -152,13 +134,13 @@ def _finalize_created_item(
     new_filename = f'{repo}#{number}.md'
     new_file = Path(new_filename)
 
-    # Read title and body from DESCRIPTION.md
-    title, body = read_description_file()
+    # Read title and body from DESCRIPTION.md (plain format)
+    title, body = read_description_file(expect_plain=True)
     if not title:
         err("Warning: Could not parse title from DESCRIPTION.md")
         return
 
-    # Write using helper with proper link reference format
+    # Write using helper with link-reference format
     write_description_with_link_ref(
         new_file,
         owner,
@@ -255,16 +237,10 @@ def init(
             proc.run('git', 'config', 'pr.base', base, log=None)
             err(f"Base branch: {base}")
 
-        # Create initial DESCRIPTION.md
+        # Create initial DESCRIPTION.md (plain format - link-reference added after PR creation)
         with open('DESCRIPTION.md', 'w') as f:
-            if owner and repo_name:
-                f.write(f"# [{owner}/{repo_name}#XXXX] Title\n\n")
-                f.write("Description of the PR...\n\n")
-                f.write(f"[{owner}/{repo_name}#XXXX]: https://github.com/{owner}/{repo_name}/pull/XXXX\n")
-            else:
-                f.write("# [owner/repo#XXXX] Title\n\n")
-                f.write("Description of the PR...\n\n")
-                f.write("[owner/repo#XXXX]: https://github.com/owner/repo/pull/XXXX\n")
+            f.write("# Title\n\n")
+            f.write("Description of the PR...\n")
 
         err("Created DESCRIPTION.md template")
 
@@ -462,7 +438,51 @@ def create_new_pr(
 
         try:
             output = proc.text(*cmd, log=None).strip()
-            if not use_web_editor:
+
+            if use_web_editor:
+                # Web editor mode: wait for user to finish editing in browser
+                err("Opened PR in web editor")
+                err("Press Enter when you've finished creating the PR in the browser...")
+                input()
+
+                # Query GitHub to find the newly created PR
+                err("Fetching PR information...")
+                try:
+                    # List PRs for the head branch
+                    prs = proc.json('gh', 'pr', 'list', '-R', f'{owner}/{repo}', '--head', head, '--json', 'number,url', log=None)
+                    if prs and len(prs) > 0:
+                        pr_number = str(prs[0]['number'])
+                        pr_url = prs[0]['url']
+
+                        # Store PR info in git config
+                        proc.run('git', 'config', 'pr.number', pr_number, log=None)
+                        proc.run('git', 'config', 'pr.url', pr_url, log=None)
+                        err(f"Found PR #{pr_number}: {pr_url}")
+
+                        # Check for gist remote and store its ID if found
+                        try:
+                            remotes = proc.lines('git', 'remote', '-v', log=None)
+                            for remote_line in remotes:
+                                if 'gist.github.com' in remote_line:
+                                    gist_match = GIST_ID_PATTERN.search(remote_line)
+                                    if gist_match:
+                                        gist_id = gist_match.group(1)
+                                        proc.run('git', 'config', 'pr.gist', gist_id, log=None)
+                                        err(f"Detected and stored gist ID: {gist_id}")
+                                        break
+                        except Exception:
+                            pass
+
+                        # Finalize: rename file, commit, rename directory
+                        _finalize_created_item(owner, repo, pr_number, pr_url, 'pr')
+                    else:
+                        err("Warning: Could not find newly created PR")
+                        err("You may need to run 'ghpr pull' to sync with GitHub")
+                except Exception as e:
+                    err(f"Error: Could not fetch PR information: {e}")
+                    raise
+            else:
+                # API mode: PR number returned immediately
                 # Extract PR number from URL
                 match = re.search(r'/pull/(\d+)', output)
                 if match:
@@ -545,7 +565,38 @@ def create_new_issue(
 
         try:
             output = proc.text(*cmd, log=None).strip()
-            if not use_web_editor:
+
+            if use_web_editor:
+                # Web editor mode: wait for user to finish editing in browser
+                err("Opened issue in web editor")
+                err("Press Enter when you've finished creating the issue in the browser...")
+                input()
+
+                # Query GitHub to find the newly created issue
+                err("Fetching issue information...")
+                try:
+                    # List recent issues in the repo and find the newest one
+                    issues = proc.json('gh', 'issue', 'list', '-R', f'{owner}/{repo}', '--json', 'number,url', '--limit', '1', log=None)
+                    if issues and len(issues) > 0:
+                        issue_number = str(issues[0]['number'])
+                        issue_url = issues[0]['url']
+
+                        # Store issue info in git config
+                        proc.run('git', 'config', 'pr.number', issue_number, log=None)
+                        proc.run('git', 'config', 'pr.type', 'issue', log=None)
+                        proc.run('git', 'config', 'pr.url', issue_url, log=None)
+                        err(f"Found issue #{issue_number}: {issue_url}")
+
+                        # Finalize: rename file, commit, rename directory
+                        _finalize_created_item(owner, repo, issue_number, issue_url, 'issue')
+                    else:
+                        err("Warning: Could not find newly created issue")
+                        err("You may need to run 'ghpr pull' to sync with GitHub")
+                except Exception as e:
+                    err(f"Error: Could not fetch issue information: {e}")
+                    raise
+            else:
+                # API mode: issue number returned immediately
                 # Extract issue number from URL
                 match = re.search(r'/issues/(\d+)', output)
                 if match:
@@ -563,8 +614,8 @@ def create_new_issue(
 
                     # Finalize: rename file, commit, rename directory
                     _finalize_created_item(owner, repo, issue_number, output, 'issue')
-            else:
-                err(f"Created issue: {output}")
+                else:
+                    err(f"Created issue: {output}")
         except Exception as e:
             err(f"Error creating issue: {e}")
             exit(1)
