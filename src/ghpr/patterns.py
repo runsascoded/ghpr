@@ -3,7 +3,7 @@
 import re
 
 # Compiled regex patterns
-PR_LINK_REF_PATTERN = re.compile(r'^#\s*\[([^/]+/[^#]+#\d+)]\s+(.*)$')  # # [org/repo#123] Title
+PR_LINK_REF_PATTERN = re.compile(r'^#\s*\[([^/]+/[^#]+#(?:\d+|XXXX|XX|[Nn][Uu][Mm][Bb][Ee][Rr]))]\s+(.*)$')  # # [org/repo#123] Title or placeholders
 PR_INLINE_LINK_PATTERN = re.compile(r'^#\s*\[([^/]+)/([^#]+)#(\d+)](?:\([^)]+\))?\s*(.*)$')  # # [org/repo#123](url) Title
 PR_TITLE_PATTERN = re.compile(r'^#\s*\[([^]]+)](?:\([^)]+\))?\s*(.*)$')  # # [owner/repo#num](url) Title
 PR_FILENAME_PATTERN = re.compile(r'^([^#]+)#(\d+)\.md$')  # repo#123.md

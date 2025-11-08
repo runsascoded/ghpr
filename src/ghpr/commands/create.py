@@ -96,7 +96,7 @@ def _parse_github_url(url: str) -> tuple[str | None, str | None]:
 
 
 def _read_and_parse_description() -> tuple[str, str]:
-    """Read DESCRIPTION.md and parse title and body.
+    """Read DESCRIPTION.md and parse title and body (expects plain format).
 
     Returns:
         (title, body) tuple
@@ -105,31 +105,13 @@ def _read_and_parse_description() -> tuple[str, str]:
         err("Error: DESCRIPTION.md not found. Run 'ghpr init' first")
         exit(1)
 
-    with open('DESCRIPTION.md', 'r') as f:
-        content = f.read()
-
-    lines = content.split('\n')
-    if not lines:
-        err("Error: DESCRIPTION.md is empty")
+    # Read plain format (pre-creation)
+    title, body = read_description_file(expect_plain=True)
+    if not title:
+        err("Error: Could not parse DESCRIPTION.md")
         exit(1)
 
-    # Parse title from first line
-    first_line = lines[0].strip()
-    if first_line.startswith('#'):
-        title = first_line.lstrip('#').strip()
-        # Remove any [owner/repo#NUM] prefix if present
-        title = re.sub(r'^\[?[^/\]]+/[^#\]]+#\d+]?\s*', '', title)
-        title = re.sub(r'^[^/]+/[^#]+#\w+\s+', '', title)  # Handle owner/repo#NUMBER format
-    else:
-        title = first_line
-
-    # Get body (rest of the file)
-    body_lines = lines[1:]
-    while body_lines and not body_lines[0].strip():
-        body_lines = body_lines[1:]
-    body = '\n'.join(body_lines).strip()
-
-    return title, body
+    return title, body or ''
 
 
 def _finalize_created_item(
@@ -152,13 +134,13 @@ def _finalize_created_item(
     new_filename = f'{repo}#{number}.md'
     new_file = Path(new_filename)
 
-    # Read title and body from DESCRIPTION.md
-    title, body = read_description_file()
+    # Read title and body from DESCRIPTION.md (plain format)
+    title, body = read_description_file(expect_plain=True)
     if not title:
         err("Warning: Could not parse title from DESCRIPTION.md")
         return
 
-    # Write using helper with proper link reference format
+    # Write using helper with link-reference format
     write_description_with_link_ref(
         new_file,
         owner,
@@ -255,21 +237,57 @@ def init(
             proc.run('git', 'config', 'pr.base', base, log=None)
             err(f"Base branch: {base}")
 
-        # Create initial DESCRIPTION.md
+        # Create initial DESCRIPTION.md (plain format - link-reference added after PR creation)
         with open('DESCRIPTION.md', 'w') as f:
-            if repo:
-                f.write(f"# {repo}#NUMBER Title\n\n")
-            else:
-                f.write("# owner/repo#NUMBER Title\n\n")
+            f.write("# Title\n\n")
             f.write("Description of the PR...\n")
 
         err("Created DESCRIPTION.md template")
+
+        # Create initial commit
+        proc.run('git', 'add', 'DESCRIPTION.md', log=None)
+        proc.run('git', 'commit', '-m', 'Initial PR draft', log=None)
+        err("Created initial commit")
+
+        # Create and configure gist mirror
+        from ..gist import create_gist
+        try:
+            # Create gist (public by default, matching typical repo visibility)
+            description = f'Draft PR for {owner}/{repo_name}' if owner and repo_name else 'Draft PR'
+            gist_id = create_gist(
+                file_path='DESCRIPTION.md',
+                description=description,
+                is_public=True,
+                store_id=True  # Automatically stores in git config pr.gist
+            )
+
+            if gist_id:
+                # Add gist as remote
+                gist_url = f'git@gist.github.com:{gist_id}.git'
+                proc.run('git', 'remote', 'add', 'g', gist_url, log=None)
+                proc.run('git', 'config', 'pr.gist-remote', 'g', log=None)
+                err(f"Created gist: https://gist.github.com/{gist_id}")
+                err("Added remote 'g' for gist mirror")
+
+                # Fetch and set up tracking
+                proc.run('git', 'fetch', 'g', log=None)
+                proc.run('git', 'branch', '--set-upstream-to=g/main', 'main', log=None)
+                err("Configured main branch to track g/main")
+
+                # Push initial commit to gist (with history)
+                proc.run('git', 'push', '-f', 'g', 'main', log=None)
+                err("Pushed initial commit to gist")
+        except Exception as e:
+            err(f"Warning: Could not create gist mirror: {e}")
+            err("You can add it later with 'ghpr push -g'")
+
+        # End of cd(new_dir) context - we're done working in gh/new/
 
     err("")
     err("Next steps:")
     err("  cd gh/new")
     err("  vim DESCRIPTION.md  # Edit title and description")
-    err("  git add DESCRIPTION.md && git commit -m 'Draft PR'")
+    err("  git commit -am 'Update PR description'")
     err("  ghpr create")
 
 
@@ -279,14 +297,14 @@ def create(
     draft: bool,
     issue: bool,
     repo: str | None,
-    web: bool,
+    yes: int,
     dry_run: bool,
 ) -> None:
     """Create a new PR or Issue from the current draft."""
     if issue:
-        create_new_issue(repo, web, dry_run)
+        create_new_issue(repo, yes, dry_run)
     else:
-        create_new_pr(head, base, draft, repo, web, dry_run)
+        create_new_pr(head, base, draft, repo, yes, dry_run)
 
 
 def create_new_pr(
@@ -294,10 +312,16 @@ def create_new_pr(
     base: str | None,
     draft: bool,
     repo_arg: str | None,
-    web: bool,
+    yes: int,
     dry_run: bool,
 ) -> None:
-    """Create a new PR from DESCRIPTION.md."""
+    """Create a new PR from DESCRIPTION.md.
+
+    Args:
+        yes: 0 = open web editor during creation (default)
+             1 = skip prompt, create then open result
+             2+ = skip all, create silently
+    """
     # Read and parse DESCRIPTION.md
     title, body = _read_and_parse_description()
 
@@ -343,15 +367,31 @@ def create_new_pr(
 
     # Get head branch - try to auto-detect from parent repo
     if not head:
+        # Go up one level (to get out of gh/new/) and find the git repo root
         parent_dir = Path('..').resolve()
-        if exists(join(parent_dir, '.git')):
-            try:
-                with cd(parent_dir):
-                    # Use branch resolution
+        try:
+            with cd(parent_dir):
+                # Find the git repo root
+                repo_root = proc.line('git', 'rev-parse', '--show-toplevel', err_ok=True, log=None)
+                if not repo_root:
+                    err("Error: Could not detect head branch. Specify --head explicitly")
+                    exit(1)
+
+                with cd(repo_root):
+                    # Use branch resolution to get remote tracking branch
                     ref_name, remote_ref = resolve_remote_ref(verbose=False)
-                    if ref_name:
+                    if remote_ref:
+                        # Extract branch name from remote_ref (e.g., "m/rw/ws3" -> "rw/ws3")
+                        # GitHub expects just the branch name without the remote prefix
+                        if '/' in remote_ref:
+                            head = '/'.join(remote_ref.split('/')[1:])
+                        else:
+                            head = remote_ref
+                        err(f"Auto-detected head branch from remote: {head}")
+                    elif ref_name:
+                        # Fallback to local branch name if no remote tracking
                         head = ref_name
-                        err(f"Auto-detected head branch: {head}")
+                        err(f"Auto-detected head branch (local): {head}")
 
                     if not head:
                         # Fallback to current branch
@@ -359,12 +399,9 @@ def create_new_pr(
                         if head == 'HEAD':
                             err("Error: Parent repo is in detached HEAD state. Specify --head explicitly")
                             exit(1)
-            except Exception as e:
-                err(f"Error detecting head branch: {e}")
-                err("Specify --head explicitly")
-                exit(1)
-        else:
-            err("Error: Could not detect head branch. Specify --head explicitly")
+        except Exception as e:
+            err(f"Error detecting head branch: {e}")
+            err("Specify --head explicitly")
             exit(1)
 
     # Create the PR
@@ -392,12 +429,60 @@ def create_new_pr(
         if draft:
             cmd.append('--draft')
 
-        if web:
+        # Determine opening behavior based on yes count
+        use_web_editor = (yes == 0)
+        open_after = (yes == 1)
+
+        if use_web_editor:
             cmd.append('--web')
 
         try:
             output = proc.text(*cmd, log=None).strip()
-            if not web:
+
+            if use_web_editor:
+                # Web editor mode: wait for user to finish editing in browser
+                err("Opened PR in web editor")
+                err("Press Enter when you've finished creating the PR in the browser...")
+                input()
+
+                # Query GitHub to find the newly created PR
+                err("Fetching PR information...")
+                try:
+                    # List PRs for the head branch
+                    prs = proc.json('gh', 'pr', 'list', '-R', f'{owner}/{repo}', '--head', head, '--json', 'number,url', log=None)
+                    if prs and len(prs) > 0:
+                        pr_number = str(prs[0]['number'])
+                        pr_url = prs[0]['url']
+
+                        # Store PR info in git config
+                        proc.run('git', 'config', 'pr.number', pr_number, log=None)
+                        proc.run('git', 'config', 'pr.url', pr_url, log=None)
+                        err(f"Found PR #{pr_number}: {pr_url}")
+
+                        # Check for gist remote and store its ID if found
+                        try:
+                            remotes = proc.lines('git', 'remote', '-v', log=None)
+                            for remote_line in remotes:
+                                if 'gist.github.com' in remote_line:
+                                    gist_match = GIST_ID_PATTERN.search(remote_line)
+                                    if gist_match:
+                                        gist_id = gist_match.group(1)
+                                        proc.run('git', 'config', 'pr.gist', gist_id, log=None)
+                                        err(f"Detected and stored gist ID: {gist_id}")
+                                        break
+                        except Exception:
+                            pass
+
+                        # Finalize: rename file, commit, rename directory
+                        _finalize_created_item(owner, repo, pr_number, pr_url, 'pr')
+                    else:
+                        err("Warning: Could not find newly created PR")
+                        err("You may need to run 'ghpr pull' to sync with GitHub")
+                except Exception as e:
+                    err(f"Error: Could not fetch PR information: {e}")
+                    raise
+            else:
+                # API mode: PR number returned immediately
                 # Extract PR number from URL
                 match = re.search(r'/pull/(\d+)', output)
                 if match:
@@ -407,6 +492,10 @@ def create_new_pr(
                     proc.run('git', 'config', 'pr.url', output, log=None)
                     err(f"Created PR #{pr_number}: {output}")
                     err("PR info stored in git config")
+
+                    # Open PR in browser if requested
+                    if open_after:
+                        proc.run('gh', 'pr', 'view', pr_number, '--web', '-R', f'{owner}/{repo}', log=None)
 
                     # Check for gist remote and store its ID if found
                     try:
@@ -435,10 +524,16 @@ def create_new_pr(
 
 def create_new_issue(
     repo_arg: str | None,
-    web: bool,
+    yes: int,
     dry_run: bool,
 ) -> None:
-    """Create a new Issue from DESCRIPTION.md."""
+    """Create a new Issue from DESCRIPTION.md.
+
+    Args:
+        yes: 0 = open web editor during creation (default)
+             1 = skip prompt, create then open result
+             2+ = skip all, create silently
+    """
     # Read and parse DESCRIPTION.md
     title, body = _read_and_parse_description()
 
@@ -461,12 +556,47 @@ def create_new_issue(
                '--title', title,
                '--body', body]
 
-        if web:
+        # Determine opening behavior based on yes count
+        use_web_editor = (yes == 0)
+        open_after = (yes == 1)
+
+        if use_web_editor:
             cmd.append('--web')
 
         try:
             output = proc.text(*cmd, log=None).strip()
-            if not web:
+
+            if use_web_editor:
+                # Web editor mode: wait for user to finish editing in browser
+                err("Opened issue in web editor")
+                err("Press Enter when you've finished creating the issue in the browser...")
+                input()
+
+                # Query GitHub to find the newly created issue
+                err("Fetching issue information...")
+                try:
+                    # List recent issues in the repo and find the newest one
+                    issues = proc.json('gh', 'issue', 'list', '-R', f'{owner}/{repo}', '--json', 'number,url', '--limit', '1', log=None)
+                    if issues and len(issues) > 0:
+                        issue_number = str(issues[0]['number'])
+                        issue_url = issues[0]['url']
+
+                        # Store issue info in git config
+                        proc.run('git', 'config', 'pr.number', issue_number, log=None)
+                        proc.run('git', 'config', 'pr.type', 'issue', log=None)
+                        proc.run('git', 'config', 'pr.url', issue_url, log=None)
+                        err(f"Found issue #{issue_number}: {issue_url}")
+
+                        # Finalize: rename file, commit, rename directory
+                        _finalize_created_item(owner, repo, issue_number, issue_url, 'issue')
+                    else:
+                        err("Warning: Could not find newly created issue")
+                        err("You may need to run 'ghpr pull' to sync with GitHub")
+                except Exception as e:
+                    err(f"Error: Could not fetch issue information: {e}")
+                    raise
+            else:
+                # API mode: issue number returned immediately
                 # Extract issue number from URL
                 match = re.search(r'/issues/(\d+)', output)
                 if match:
@@ -478,10 +608,14 @@ def create_new_issue(
                     err(f"Created issue #{issue_number}: {output}")
                     err("Issue info stored in git config")
 
+                    # Open issue in browser if requested
+                    if open_after:
+                        proc.run('gh', 'issue', 'view', issue_number, '--web', '-R', f'{owner}/{repo}', log=None)
+
                     # Finalize: rename file, commit, rename directory
                     _finalize_created_item(owner, repo, issue_number, output, 'issue')
-            else:
-                err(f"Created issue: {output}")
+                else:
+                    err(f"Created issue: {output}")
         except Exception as e:
             err(f"Error creating issue: {e}")
             exit(1)
@@ -506,7 +640,7 @@ def register(cli):
                     flag('-i', '--issue', help='Create an issue instead of a PR')(
                         flag('-n', '--dry-run', help='Show what would be done without creating')(
                             opt('-r', '--repo', help='Repository (owner/repo format, default: auto-detect)')(
-                                flag('-w', '--web', help='Open in web browser after creating')(
+                                opt('-y', '--yes', count=True, default=0, help='Skip prompt: once = create then view, twice = create silently (default: open web editor during creation)')(
                                     create
                                 )
                             )

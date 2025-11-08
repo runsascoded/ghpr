@@ -79,6 +79,15 @@ def write_description_with_link_ref(
     pr_ref = f'{owner}/{repo}#{pr_number}'
     link_def = f'[{pr_ref}]: {url}'
 
+    # Remove any placeholder link definitions from body (e.g., [owner/repo#XXXX], [owner/repo#NUMBER])
+    if body:
+        # Pattern to match placeholder link definitions
+        placeholder_pattern = re.compile(
+            r'^\[' + re.escape(f'{owner}/{repo}') + r'#(XXXX|XX|[Nn][Uu][Mm][Bb][Ee][Rr])\]:[^\n]*\n?',
+            re.MULTILINE
+        )
+        body = placeholder_pattern.sub('', body)
+
     # Check if the link def already exists in the body
     pr_link_pattern = re.compile(r'^\[' + re.escape(pr_ref) + r']:', re.MULTILINE)
     link_exists = pr_link_pattern.search(body) if body else False
@@ -104,8 +113,17 @@ def write_description_with_link_ref(
             f.write(f'{link_def}\n')
 
 
-def read_description_file(path: Path = None) -> tuple[str | None, str | None]:
-    """Read and parse description file."""
+def read_description_file(path: Path = None, expect_plain: bool = False) -> tuple[str | None, str | None]:
+    """Read and parse description file.
+
+    Args:
+        path: Directory containing description file (defaults to cwd)
+        expect_plain: If True, expect plain "# Title" format (pre-creation).
+                     If False, try link-reference formats first (post-creation).
+
+    Returns:
+        Tuple of (title, body)
+    """
     desc_file = find_description_file(path)
     if not desc_file:
         return None, None
@@ -117,16 +135,34 @@ def read_description_file(path: Path = None) -> tuple[str | None, str | None]:
     if not lines:
         return None, None
 
-    # First line should be:
-    # - # [owner/repo#123] Title (link-reference style)
-    # - # [owner/repo#123](url) Title (inline link style)
     first_line = lines[0].strip()
 
+    if expect_plain:
+        # Pre-creation: expect plain "# Title" format only
+        match = H1_TITLE_PATTERN.match(first_line)
+        if match:
+            title = match.group(1).strip()
+            body_lines = lines[1:]
+            while body_lines and not body_lines[0].strip():
+                body_lines = body_lines[1:]
+            body = '\n'.join(body_lines).rstrip()
+            return title, body
+
+        # If we find a link-reference format when expecting plain, that's an error
+        if PR_LINK_REF_PATTERN.match(first_line) or PR_INLINE_LINK_PATTERN.match(first_line):
+            err(f"Error: Expected plain format but found link-reference format in {desc_file.name}")
+            exit(1)
+
+        return None, None
+
+    # Post-creation: try link-reference formats first
     # Try link-reference style first (preferred)
     match = PR_LINK_REF_PATTERN.match(first_line)
     if match:
         # This is link-reference style, get the title
         title = match.group(2).strip()
+        # Strip any placeholder prefix like [owner/repo#XXXX] or [owner/repo#NUMBER]
+        title = re.sub(r'^\[?[^/\]]+/[^#\]]+#(XXXX|XX|[Nn][Uu][Mm][Bb][Ee][Rr]|\d+)]?\s*', '', title)
         # Find where the body starts (skip first line and blank lines)
         body_lines = []
         in_body = False

@@ -64,7 +64,7 @@ class TestCreateIssue:
             mock_get_repo.return_value = ('test-owner', 'test-repo')
 
             # Should not make any gh calls in dry-run mode
-            create_new_issue(repo_arg=None, web=False, dry_run=True)
+            create_new_issue(repo_arg=None, yes=2, dry_run=True)
 
             # Verify no gh issue create call was made
             gh_calls = [call for call in mock_proc.text.call_args_list if 'gh' in str(call)]
@@ -87,7 +87,7 @@ class TestCreateIssue:
             mock_proc.text.return_value = 'https://github.com/test-owner/test-repo/issues/42'
             mock_read_desc.return_value = ('Test Issue', 'Test body content')
 
-            create_new_issue(repo_arg=None, web=False, dry_run=False)
+            create_new_issue(repo_arg=None, yes=2, dry_run=False)
 
             # Verify gh issue create was called
             mock_proc.text.assert_called_once()
@@ -127,7 +127,7 @@ class TestCreateIssue:
             mock_proc.text.return_value = 'https://github.com/other-owner/other-repo/issues/123'
             mock_read_desc.return_value = ('Test Issue', 'Test body')
 
-            create_new_issue(repo_arg='other-owner/other-repo', web=False, dry_run=False)
+            create_new_issue(repo_arg='other-owner/other-repo', yes=2, dry_run=False)
 
             # Verify get_owner_repo was called with the arg
             mock_get_repo.assert_called_once_with('other-owner/other-repo')
@@ -173,7 +173,7 @@ class TestCreatePR:
                 base='main',
                 draft=False,
                 repo_arg=None,
-                web=False,
+                yes=2,
                 dry_run=False
             )
 
@@ -217,7 +217,7 @@ class TestCreatePR:
                 base='main',
                 draft=True,  # Draft flag
                 repo_arg=None,
-                web=False,
+                yes=2,  # Create silently (skip all prompts)
                 dry_run=False
             )
 
