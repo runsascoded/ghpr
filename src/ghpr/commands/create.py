@@ -279,14 +279,14 @@ def create(
     draft: bool,
     issue: bool,
     repo: str | None,
-    web: bool,
+    yes: int,
     dry_run: bool,
 ) -> None:
     """Create a new PR or Issue from the current draft."""
     if issue:
-        create_new_issue(repo, web, dry_run)
+        create_new_issue(repo, yes, dry_run)
     else:
-        create_new_pr(head, base, draft, repo, web, dry_run)
+        create_new_pr(head, base, draft, repo, yes, dry_run)
 
 
 def create_new_pr(
@@ -294,10 +294,16 @@ def create_new_pr(
     base: str | None,
     draft: bool,
     repo_arg: str | None,
-    web: bool,
+    yes: int,
     dry_run: bool,
 ) -> None:
-    """Create a new PR from DESCRIPTION.md."""
+    """Create a new PR from DESCRIPTION.md.
+
+    Args:
+        yes: 0 = open web editor during creation (default)
+             1 = skip prompt, create then open result
+             2+ = skip all, create silently
+    """
     # Read and parse DESCRIPTION.md
     title, body = _read_and_parse_description()
 
@@ -405,12 +411,16 @@ def create_new_pr(
         if draft:
             cmd.append('--draft')
 
-        if web:
+        # Determine opening behavior based on yes count
+        use_web_editor = (yes == 0)
+        open_after = (yes == 1)
+
+        if use_web_editor:
             cmd.append('--web')
 
         try:
             output = proc.text(*cmd, log=None).strip()
-            if not web:
+            if not use_web_editor:
                 # Extract PR number from URL
                 match = re.search(r'/pull/(\d+)', output)
                 if match:
@@ -420,6 +430,10 @@ def create_new_pr(
                     proc.run('git', 'config', 'pr.url', output, log=None)
                     err(f"Created PR #{pr_number}: {output}")
                     err("PR info stored in git config")
+
+                    # Open PR in browser if requested
+                    if open_after:
+                        proc.run('gh', 'pr', 'view', pr_number, '--web', '-R', f'{owner}/{repo}', log=None)
 
                     # Check for gist remote and store its ID if found
                     try:
@@ -448,10 +462,16 @@ def create_new_pr(
 
 def create_new_issue(
     repo_arg: str | None,
-    web: bool,
+    yes: int,
     dry_run: bool,
 ) -> None:
-    """Create a new Issue from DESCRIPTION.md."""
+    """Create a new Issue from DESCRIPTION.md.
+
+    Args:
+        yes: 0 = open web editor during creation (default)
+             1 = skip prompt, create then open result
+             2+ = skip all, create silently
+    """
     # Read and parse DESCRIPTION.md
     title, body = _read_and_parse_description()
 
@@ -474,12 +494,16 @@ def create_new_issue(
                '--title', title,
                '--body', body]
 
-        if web:
+        # Determine opening behavior based on yes count
+        use_web_editor = (yes == 0)
+        open_after = (yes == 1)
+
+        if use_web_editor:
             cmd.append('--web')
 
         try:
             output = proc.text(*cmd, log=None).strip()
-            if not web:
+            if not use_web_editor:
                 # Extract issue number from URL
                 match = re.search(r'/issues/(\d+)', output)
                 if match:
@@ -490,6 +514,10 @@ def create_new_issue(
                     proc.run('git', 'config', 'pr.url', output, log=None)
                     err(f"Created issue #{issue_number}: {output}")
                     err("Issue info stored in git config")
+
+                    # Open issue in browser if requested
+                    if open_after:
+                        proc.run('gh', 'issue', 'view', issue_number, '--web', '-R', f'{owner}/{repo}', log=None)
 
                     # Finalize: rename file, commit, rename directory
                     _finalize_created_item(owner, repo, issue_number, output, 'issue')
@@ -519,7 +547,7 @@ def register(cli):
                     flag('-i', '--issue', help='Create an issue instead of a PR')(
                         flag('-n', '--dry-run', help='Show what would be done without creating')(
                             opt('-r', '--repo', help='Repository (owner/repo format, default: auto-detect)')(
-                                flag('-w', '--web', help='Open in web browser after creating')(
+                                opt('-y', '--yes', count=True, default=0, help='Skip prompt: once = create then view, twice = create silently (default: open web editor during creation)')(
                                     create
                                 )
                             )
