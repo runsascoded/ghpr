@@ -343,10 +343,17 @@ def create_new_pr(
 
     # Get head branch - try to auto-detect from parent repo
     if not head:
+        # Go up one level (to get out of gh/new/) and find the git repo root
         parent_dir = Path('..').resolve()
-        if exists(join(parent_dir, '.git')):
-            try:
-                with cd(parent_dir):
+        try:
+            with cd(parent_dir):
+                # Find the git repo root
+                repo_root = proc.line('git', 'rev-parse', '--show-toplevel', err_ok=True, log=None)
+                if not repo_root:
+                    err("Error: Could not detect head branch. Specify --head explicitly")
+                    exit(1)
+
+                with cd(repo_root):
                     # Use branch resolution to get remote tracking branch
                     ref_name, remote_ref = resolve_remote_ref(verbose=False)
                     if remote_ref:
@@ -368,12 +375,9 @@ def create_new_pr(
                         if head == 'HEAD':
                             err("Error: Parent repo is in detached HEAD state. Specify --head explicitly")
                             exit(1)
-            except Exception as e:
-                err(f"Error detecting head branch: {e}")
-                err("Specify --head explicitly")
-                exit(1)
-        else:
-            err("Error: Could not detect head branch. Specify --head explicitly")
+        except Exception as e:
+            err(f"Error detecting head branch: {e}")
+            err("Specify --head explicitly")
             exit(1)
 
     # Create the PR
