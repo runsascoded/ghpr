@@ -1,6 +1,14 @@
 # ghpr
 
-GitHub PR/Issue management tool for local iteration with gist mirroring.
+"Clone" GitHub PRs/issues, locally edit title/description/comments, "push" back to GitHub, and mirror to Gists.
+
+- Sometimes PR and issue descriptions/comments warrant more complex editing than GitHub's web UI comfortably allows.
+- `ghpr` lets you "clone" PRs and issues locally as Markdown files (including titles and comments), so you can edit them with your favorite IDE, then "push" updates back to GitHub.
+- `ghpr` also mirrors PR/issue content to Gists, for version control and easy sharing / backing up / syncing across machines.
+
+**Examples:**
+- [marin#1773]: issue with complex description and comments ([e.g.][1773 comment]); mirrored to [this gist][1773 gist]
+- [marin#1723]: PR with complex description, mirrored to [this gist][1723 gist]
 
 ## Features
 
@@ -22,12 +30,16 @@ pip install ghpr-py
 ### Basic Workflow
 
 ```bash
-# Clone a PR or issue
+# Clone a PR or issue (to `gh/123` by default
 ghpr clone https://github.com/owner/repo/pull/123
 # or
 ghpr clone owner/repo#123
 
-# Show differences
+# Make edits to:
+# - Title / Description: `gh/123/repo#123.md`
+# - Comment files: `zNNNNNN-<author>.md` (existing comments) or `new.md` (new comments)
+
+# Show differences (between local "clone" and GitHub)
 ghpr diff
 
 # Push changes
@@ -58,7 +70,7 @@ The `push` command will:
 ### Uploading Images
 
 ```bash
-# Upload image(s) to the gist and get markdown URLs
+# Upload image(s) to this issue or PR's Gist mirror, and get markdown URLs
 ghpr upload screenshot.png
 # Output: ![screenshot.png](https://gist.githubusercontent.com/...)
 ```
@@ -77,7 +89,7 @@ Since PRs are issues in GitHub's API, we use the same `gh/{number}/` pattern for
 
 ## Shell Integration (Optional)
 
-For power users who want shorter aliases, `ghpr` provides shell integration:
+For users who want shorter aliases, `ghpr` provides shell integration:
 
 ### Bash/Zsh
 
@@ -117,6 +129,8 @@ See the full list with:
 ghpr shell-integration bash
 ```
 
-## Development
-
-Repository: [runsascoded/ghpr](https://github.com/runsascoded/ghpr)
+[marin#1773]: https://github.com/marin-community/marin/issues/1773
+[1773 comment]: https://github.com/marin-community/marin/issues/1773#issuecomment-3478991552
+[1773 gist]: https://gist.github.com/ryan-williams/857fcaa8b2f80a250a70ac0250634ee5
+[marin#1723]: https://github.com/marin-community/marin/pull/1723
+[1723 gist]: https://gist.github.com/f38c0ab59897cfb57c99081b7d87af54
