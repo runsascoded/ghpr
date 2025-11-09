@@ -274,4 +274,5 @@ def register(cli):
     @flag('-G', '--no-gist', help='Skip creating a gist')
     @opt('-d', '--directory', help='Directory to clone into (default: gh/{number})')
     def clone_cmd(spec, no_comments, no_gist, directory):
+        """Clone a PR or Issue description and comments to a local directory."""
         clone(spec, directory, no_gist, no_comments)

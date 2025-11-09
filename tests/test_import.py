@@ -29,6 +29,8 @@ def test_cli_loads():
 
 def test_all_commands_present():
     """Test that all expected commands are present."""
+    import re
+
     result = subprocess.run(
         ["ghpr", "--help"],
         capture_output=True,
@@ -37,7 +39,6 @@ def test_all_commands_present():
 
     expected_commands = [
         "clone",
-        "comment",
         "create",
         "diff",
         "init",
@@ -50,8 +51,13 @@ def test_all_commands_present():
         "upload",
     ]
 
+    # Extract command names from the Commands: section
+    # Commands appear as lines starting with "  command-name"
+    command_pattern = re.compile(r'^  (\S+)', re.MULTILINE)
+    actual_commands = command_pattern.findall(result.stdout)
+
     for cmd in expected_commands:
-        assert cmd in result.stdout, f"Command '{cmd}' not found in CLI help"
+        assert cmd in actual_commands, f"Command '{cmd}' not found in CLI commands. Found: {actual_commands}"
 
 
 def test_shell_integration_outputs():
