@@ -164,6 +164,21 @@ def _finalize_created_item(
     proc.run('git', 'commit', '-m', f'Rename to {new_filename} and add {item_label} #{number} link', log=None)
     err(f"Updated {new_filename} with {item_label} link")
 
+    # Push updates to GitHub (link-def and footer)
+    from . import push as push_module
+    err("Pushing updates to GitHub...")
+    push_module.push(
+        gist=False,
+        dry_run=False,
+        footer=0,  # Auto-detect footer based on gist existence
+        no_footer=False,
+        open_browser=False,
+        images=False,
+        gist_private=None,
+        no_comments=True,  # Don't sync comments during create
+        force_others=False
+    )
+
     # Push to gist remote if it exists
     from ..gist import find_gist_remote
     gist_remote = find_gist_remote()
