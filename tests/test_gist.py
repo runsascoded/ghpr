@@ -102,10 +102,14 @@ class TestExtractGistFooter:
 
         body_without, gist_url = extract_gist_footer(body)
 
-        assert 'Line 1' in body_without
-        assert 'Line 2 with **markdown**' in body_without
-        assert '- List item' in body_without
-        assert '<!-- Synced with' not in body_without
+        expected_body = (
+            'Line 1\n'
+            '\n'
+            'Line 2 with **markdown**\n'
+            '\n'
+            '- List item'
+        )
+        assert body_without == expected_body
         assert gist_url == 'https://gist.github.com/fedcba987654'
 
 
@@ -119,8 +123,8 @@ class TestAddGistFooter:
 
         result = add_gist_footer(body, gist_url, visible=False)
 
-        assert 'This is the body.' in result
-        assert '<!-- Synced with https://gist.github.com/abc123def456 via [ghpr](https://github.com/runsascoded/ghpr) -->' in result
+        expected = 'This is the body.\n\n<!-- Synced with https://gist.github.com/abc123def456 via [ghpr](https://github.com/runsascoded/ghpr) -->'
+        assert result == expected
 
     def test_add_visible_footer(self):
         """Test adding visible footer."""
@@ -129,9 +133,8 @@ class TestAddGistFooter:
 
         result = add_gist_footer(body, gist_url, visible=True)
 
-        assert 'This is the body.' in result
-        assert '---' in result
-        assert 'Synced with [gist](https://gist.github.com/abc123def456) via [ghpr](https://github.com/runsascoded/ghpr)' in result
+        expected = 'This is the body.\n\n\n---\n\nSynced with [gist](https://gist.github.com/abc123def456) via [ghpr](https://github.com/runsascoded/ghpr)'
+        assert result == expected
 
     def test_add_footer_to_empty_body(self):
         """Test adding footer to empty body."""
@@ -160,10 +163,8 @@ class TestAddGistFooter:
 
         result = add_gist_footer(body, new_gist_url, visible=False)
 
-        assert 'This is the body.' in result
-        assert '0123456789ab' not in result
-        assert 'fedcba987654' in result
-        assert result.count('<!-- Synced with') == 1
+        expected = 'This is the body.\n\n<!-- Synced with https://gist.github.com/fedcba987654 via [ghpr](https://github.com/runsascoded/ghpr) -->'
+        assert result == expected
 
     def test_visible_footer_with_revision(self):
         """Test visible footer preserves revision in URL."""
@@ -172,7 +173,8 @@ class TestAddGistFooter:
 
         result = add_gist_footer(body, gist_url, visible=True)
 
-        assert 'Synced with [gist](https://gist.github.com/abc123def456/0fedcba987654321)' in result
+        expected = 'This is the body.\n\n\n---\n\nSynced with [gist](https://gist.github.com/abc123def456/0fedcba987654321) via [ghpr](https://github.com/runsascoded/ghpr)'
+        assert result == expected
 
     def test_add_footer_preserves_body_formatting(self):
         """Test that adding footer preserves body formatting."""
@@ -187,9 +189,16 @@ class TestAddGistFooter:
 
         result = add_gist_footer(body, gist_url, visible=False)
 
-        assert 'Line 1' in result
-        assert 'Line 2 with **markdown**' in result
-        assert '- List item' in result
+        expected = (
+            'Line 1\n'
+            '\n'
+            'Line 2 with **markdown**\n'
+            '\n'
+            '- List item\n'
+            '\n'
+            '<!-- Synced with https://gist.github.com/abc123def456 via [ghpr](https://github.com/runsascoded/ghpr) -->'
+        )
+        assert result == expected
 
 
 class TestExtractThenAddRoundtrip:

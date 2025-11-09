@@ -24,13 +24,20 @@ class TestInit:
 
                 assert result.exit_code == 0
 
-                # Check git init was called
-                assert any('git' in str(call) and 'init' in str(call) for call in mock_proc.run.call_args_list)
+                # Extract all git commands called
+                git_commands = [
+                    call[0][0] if call[0] else None
+                    for call in mock_proc.run.call_args_list
+                ]
+                assert 'git' in git_commands
 
-                # Check git config calls
-                config_calls = [str(call) for call in mock_proc.run.call_args_list if 'config' in str(call)]
-                assert any('pr.owner' in call and 'test-owner' in call for call in config_calls)
-                assert any('pr.repo' in call and 'test-repo' in call for call in config_calls)
+                # Find specific git config calls
+                git_config_calls = [
+                    call[0] for call in mock_proc.run.call_args_list
+                    if len(call[0]) > 2 and call[0][0] == 'git' and call[0][1] == 'config'
+                ]
+                assert ('git', 'config', 'pr.owner', 'test-owner') in git_config_calls
+                assert ('git', 'config', 'pr.repo', 'test-repo') in git_config_calls
 
                 # Check gh/new/ directory and DESCRIPTION.md were created
                 assert Path('gh/new').is_dir()
@@ -80,6 +87,7 @@ class TestCreateIssue:
              patch('ghpr.commands.create.get_owner_repo') as mock_get_repo, \
              patch('ghpr.commands.create.read_description_file') as mock_read_desc, \
              patch('ghpr.commands.create.write_description_with_link_ref') as mock_write, \
+             patch('ghpr.commands.push.push') as mock_push, \
              patch('ghpr.commands.create.err'), \
              patch('os.rename'):
 
@@ -89,19 +97,19 @@ class TestCreateIssue:
 
             create_new_issue(repo_arg=None, yes=2, dry_run=False)
 
-            # Verify gh issue create was called
+            # Verify gh issue create was called with exact arguments
             mock_proc.text.assert_called_once()
             call_args = mock_proc.text.call_args[0]
-            assert 'gh' in call_args
-            assert 'issue' in call_args
-            assert 'create' in call_args
-            assert '--title' in call_args
-            assert 'Test Issue' in call_args
+            expected_args = ('gh', 'issue', 'create', '-R', 'test-owner/test-repo', '--title', 'Test Issue', '--body', 'Test body content')
+            assert call_args == expected_args
 
-            # Verify git config was set
-            config_calls = [call[0] for call in mock_proc.run.call_args_list if 'config' in call[0]]
-            assert any('pr.number' in call and '42' in call for call in config_calls)
-            assert any('pr.type' in call and 'issue' in call for call in config_calls)
+            # Verify git config was set with exact calls
+            config_calls = [
+                call[0] for call in mock_proc.run.call_args_list
+                if len(call[0]) > 1 and call[0][0] == 'git' and call[0][1] == 'config'
+            ]
+            assert ('git', 'config', 'pr.number', '42') in config_calls
+            assert ('git', 'config', 'pr.type', 'issue') in config_calls
 
             # Verify file was written with link reference
             mock_write.assert_called_once()
@@ -120,6 +128,7 @@ class TestCreateIssue:
              patch('ghpr.commands.create.get_owner_repo') as mock_get_repo, \
              patch('ghpr.commands.create.read_description_file') as mock_read_desc, \
              patch('ghpr.commands.create.write_description_with_link_ref'), \
+             patch('ghpr.commands.push.push'), \
              patch('ghpr.commands.create.err'), \
              patch('os.rename'):
 
@@ -151,6 +160,7 @@ class TestCreatePR:
         with patch('ghpr.commands.create.proc') as mock_proc, \
              patch('ghpr.commands.create.read_description_file') as mock_read_desc, \
              patch('ghpr.commands.create.write_description_with_link_ref') as mock_write, \
+             patch('ghpr.commands.push.push'), \
              patch('ghpr.commands.create.err'), \
              patch('os.rename'):
 
@@ -177,16 +187,18 @@ class TestCreatePR:
                 dry_run=False
             )
 
-            # Verify gh pr create was called with correct args
+            # Verify gh pr create was called with exact arguments
             mock_proc.text.assert_called_once()
             call_args = mock_proc.text.call_args[0]
-            assert 'gh' in call_args
-            assert 'pr' in call_args
-            assert 'create' in call_args
-            assert '--head' in call_args
-            assert 'feature-branch' in call_args
-            assert '--base' in call_args
-            assert 'main' in call_args
+            expected_args = (
+                'gh', 'pr', 'create',
+                '-R', 'test-owner/test-repo',
+                '--title', 'Test PR',
+                '--body', 'Test body',
+                '--base', 'main',
+                '--head', 'feature-branch'
+            )
+            assert call_args == expected_args
 
     def test_create_draft_pr(self, tmp_path):
         """Test draft PR includes --draft flag."""
@@ -197,6 +209,7 @@ class TestCreatePR:
         with patch('ghpr.commands.create.proc') as mock_proc, \
              patch('ghpr.commands.create.read_description_file') as mock_read_desc, \
              patch('ghpr.commands.create.write_description_with_link_ref'), \
+             patch('ghpr.commands.push.push'), \
              patch('ghpr.commands.create.err'), \
              patch('os.rename'):
 
@@ -221,6 +234,15 @@ class TestCreatePR:
                 dry_run=False
             )
 
-            # Verify --draft flag was passed
+            # Verify --draft flag was passed with exact arguments
             call_args = mock_proc.text.call_args[0]
-            assert '--draft' in call_args
+            expected_args = (
+                'gh', 'pr', 'create',
+                '-R', 'test-owner/test-repo',
+                '--title', 'Draft PR',
+                '--body', 'Draft body',
+                '--base', 'main',
+                '--head', 'feature',
+                '--draft'
+            )
+            assert call_args == expected_args
