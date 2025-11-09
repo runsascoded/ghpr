@@ -68,8 +68,8 @@ def open_pr(gist: bool) -> None:
 
 def register(cli):
     """Register command with CLI."""
-    cli.command(name='open')(
-        flag('-g', '--gist', help='Open gist instead of PR')(
-            open_pr
-        )
-    )
+
+    @cli.command(name='open')
+    @flag('-g', '--gist', help='Open gist instead of PR')
+    def open_cmd(gist):
+        open_pr(gist)

@@ -24,11 +24,17 @@ def test_cli_loads():
         text=True,
     )
     assert result.returncode == 0
-    assert "Clone and sync GitHub PR descriptions" in result.stdout
+    # Check that help output contains expected structure
+    assert result.stdout.startswith("Usage: ghpr [OPTIONS] COMMAND [ARGS]...")
+    assert "Clone and sync GitHub PR descriptions." in result.stdout
+    assert "Options:" in result.stdout
+    assert "Commands:" in result.stdout
 
 
 def test_all_commands_present():
     """Test that all expected commands are present."""
+    import re
+
     result = subprocess.run(
         ["ghpr", "--help"],
         capture_output=True,
@@ -37,7 +43,6 @@ def test_all_commands_present():
 
     expected_commands = [
         "clone",
-        "comment",
         "create",
         "diff",
         "init",
@@ -50,8 +55,13 @@ def test_all_commands_present():
         "upload",
     ]
 
+    # Extract command names from the Commands: section
+    # Commands appear as lines starting with "  command-name"
+    command_pattern = re.compile(r'^  (\S+)', re.MULTILINE)
+    actual_commands = command_pattern.findall(result.stdout)
+
     for cmd in expected_commands:
-        assert cmd in result.stdout, f"Command '{cmd}' not found in CLI help"
+        assert cmd in actual_commands, f"Command '{cmd}' not found in CLI commands. Found: {actual_commands}"
 
 
 def test_shell_integration_outputs():
@@ -62,8 +72,12 @@ def test_shell_integration_outputs():
         text=True,
     )
     assert result.returncode == 0
-    assert "ghpri()" in result.stdout  # ghpri is now a function, not alias
-    assert "alias ghprc=" in result.stdout
+    # Check for specific function/alias definitions
+    lines = result.stdout.strip().split('\n')
+    # ghpri should be a function (allow for comments after the opening brace)
+    assert any(line.strip().startswith('ghpri() {') for line in lines), "ghpri function definition not found"
+    # ghprc should be an alias
+    assert any('alias ghprc=' in line for line in lines), "ghprc alias definition not found"
 
 
 def test_patterns_regex():

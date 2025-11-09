@@ -99,15 +99,11 @@ def upload(
 
 def register(cli):
     """Register command with CLI."""
-    cli.command()(
-        arg('files', nargs=-1, required=True)(
-            opt('-b', '--branch', default='assets', help='Branch name in gist (default: assets)')(
-                opt('-f', '--format', type=Choice(['url', 'markdown', 'img', 'auto']), default='auto',
-                    help='Output format (default: auto - img for images, url for others)')(
-                    opt('-a', '--alt', help='Alt text for markdown/img format')(
-                        upload
-                    )
-                )
-            )
-        )
-    )
+
+    @cli.command()
+    @opt('-a', '--alt', help='Alt text for markdown/img format')
+    @opt('-f', '--format', type=Choice(['url', 'markdown', 'img', 'auto']), default='auto', help='Output format (default: auto - img for images, url for others)')
+    @opt('-b', '--branch', default='assets', help='Branch name in gist (default: assets)')
+    @arg('files', nargs=-1, required=True)
+    def upload_cmd(alt, format, branch, files):
+        upload(files, branch, format, alt)

@@ -116,9 +116,14 @@ class TestWriteDescriptionWithLinkRef:
             )
 
             content = filepath.read_text()
-            assert '# [owner/myrepo#123] Test PR' in content
-            assert 'This is the body.' in content
-            assert '[owner/myrepo#123]: https://github.com/owner/myrepo/pull/123' in content
+            expected = (
+                '# [owner/myrepo#123] Test PR\n'
+                '\n'
+                'This is the body.\n'
+                '\n'
+                '[owner/myrepo#123]: https://github.com/owner/myrepo/pull/123\n'
+            )
+            assert content == expected
 
     def test_write_empty_body(self):
         """Test writing description with empty body."""
@@ -137,8 +142,12 @@ class TestWriteDescriptionWithLinkRef:
             )
 
             content = filepath.read_text()
-            assert '# [owner/myrepo#456] Empty Body' in content
-            assert '[owner/myrepo#456]: https://github.com/owner/myrepo/pull/456' in content
+            expected = (
+                '# [owner/myrepo#456] Empty Body\n'
+                '\n'
+                '[owner/myrepo#456]: https://github.com/owner/myrepo/pull/456\n'
+            )
+            assert content == expected
 
     def test_write_multiline_body(self):
         """Test writing description with multiline body."""
@@ -158,8 +167,15 @@ class TestWriteDescriptionWithLinkRef:
             )
 
             content = filepath.read_text()
-            assert '# [owner/myrepo#789] Multi Line' in content
-            assert body in content
+            # Body already has trailing newline, don't add another
+            expected = (
+                '# [owner/myrepo#789] Multi Line\n'
+                '\n'
+                f'{body}'
+                '\n'
+                '[owner/myrepo#789]: https://github.com/owner/myrepo/pull/789\n'
+            )
+            assert content == expected
 
     def test_body_with_existing_link_def(self):
         """Test that existing link definition in body is not duplicated."""
@@ -258,9 +274,8 @@ class TestReadDescriptionFile:
 
             assert title == 'Multi Line'
             # Note: Link definitions are stripped, trailing whitespace removed
-            assert 'Line 1' in body
-            assert 'Line 2 with **markdown**' in body
-            assert '- List item' in body
+            expected_body = 'Line 1\n\nLine 2 with **markdown**\n\n- List item'
+            assert body == expected_body
 
     def test_read_no_description_file(self):
         """Test reading when no description file exists."""

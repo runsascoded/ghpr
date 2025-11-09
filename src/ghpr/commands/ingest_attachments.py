@@ -203,12 +203,10 @@ def ingest_attachments(
 
 def register(cli):
     """Register command with CLI."""
-    cli.command(name='ingest-attachments')(
-        opt('-b', '--branch', help='Branch name for attachments (default: $GHPR_INGEST_BRANCH or "attachments")')(
-            flag('--no-ingest', help='Disable attachment ingestion')(
-                flag('-n', '--dry-run', help='Show what would be done without making changes')(
-                    ingest_attachments
-                )
-            )
-        )
-    )
+
+    @cli.command(name='ingest-attachments')
+    @flag('-n', '--dry-run', help='Show what would be done without making changes')
+    @flag('--no-ingest', help='Disable attachment ingestion')
+    @opt('-b', '--branch', help='Branch name for attachments (default: $GHPR_INGEST_BRANCH or "attachments")')
+    def ingest_attachments_cmd(dry_run, no_ingest, branch):
+        ingest_attachments(branch, no_ingest, dry_run)

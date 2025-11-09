@@ -164,6 +164,33 @@ def _finalize_created_item(
     proc.run('git', 'commit', '-m', f'Rename to {new_filename} and add {item_label} #{number} link', log=None)
     err(f"Updated {new_filename} with {item_label} link")
 
+    # Push updates to GitHub (link-def and footer)
+    from . import push as push_module
+    err("Pushing updates to GitHub...")
+    push_module.push(
+        gist=False,
+        dry_run=False,
+        footer=0,  # Auto-detect footer based on gist existence
+        no_footer=False,
+        open_browser=False,
+        images=False,
+        gist_private=None,
+        no_comments=True,  # Don't sync comments during create
+        force_others=False
+    )
+
+    # Push to gist remote if it exists
+    from ..gist import find_gist_remote
+    gist_remote = find_gist_remote()
+    if gist_remote:
+        try:
+            proc.run('git', 'push', gist_remote, 'main', log=None)
+            err(f"Pushed to gist remote '{gist_remote}'")
+        except Exception as e:
+            err(f"Warning: Could not push to gist: {e}")
+    else:
+        err("No gist remote found, skipping gist push")
+
     # Rename directory from gh/new to gh/{number}
     current_dir = Path.cwd()
     parent_dir = current_dir.parent
@@ -300,7 +327,17 @@ def create(
     yes: int,
     dry_run: bool,
 ) -> None:
-    """Create a new PR or Issue from the current draft."""
+    """Create a new PR or Issue from the current draft.
+
+    By default, opens GitHub's web editor for interactive creation.
+    Use -y to skip the web editor and create via API instead.
+    """
+    # Validate draft flag with web editor mode
+    if draft and yes == 0:
+        err("Error: --draft flag requires -y (cannot use draft mode with web editor)")
+        err("Use: ghpr create -d -y  (or -yy for silent creation)")
+        exit(1)
+
     if issue:
         create_new_issue(repo, yes, dry_run)
     else:
@@ -623,30 +660,22 @@ def create_new_issue(
 
 def register(cli):
     """Register commands with CLI."""
+
     # Register init command
-    cli.command()(
-        opt('-r', '--repo', help='Repository (owner/repo format)')(
-            opt('-b', '--base', help='Base branch (default: repo default branch)')(
-                init
-            )
-        )
-    )
+    @cli.command()
+    @opt('-r', '--repo', help='Repository (owner/repo format)')
+    @opt('-b', '--base', help='Base branch (default: repo default branch)')
+    def init_cmd(repo, base):
+        init(repo, base)
 
     # Register create command
-    cli.command()(
-        opt('-b', '--base', help='Base branch (default: repo default branch)')(
-            flag('-d', '--draft', help='Create as draft PR')(
-                opt('-h', '--head', help='Head branch (default: auto-detect from parent repo)')(
-                    flag('-i', '--issue', help='Create an issue instead of a PR')(
-                        flag('-n', '--dry-run', help='Show what would be done without creating')(
-                            opt('-r', '--repo', help='Repository (owner/repo format, default: auto-detect)')(
-                                opt('-y', '--yes', count=True, default=0, help='Skip prompt: once = create then view, twice = create silently (default: open web editor during creation)')(
-                                    create
-                                )
-                            )
-                        )
-                    )
-                )
-            )
-        )
-    )
+    @cli.command(name='create', help='Create PR/Issue (default: web editor; use -y for API mode)')
+    @opt('-y', '--yes', count=True, default=0, help='Skip web editor: -y = create via API then view, -yy = create silently (default: interactive web editor)')
+    @opt('-r', '--repo', help='Repository (owner/repo format, default: auto-detect)')
+    @flag('-n', '--dry-run', help='Show what would be done without creating')
+    @flag('-i', '--issue', help='Create an issue instead of a PR')
+    @opt('-h', '--head', help='Head branch (default: auto-detect from parent repo)')
+    @flag('-d', '--draft', help='Create as draft PR (requires -y; incompatible with web editor)')
+    @opt('-b', '--base', help='Base branch (default: repo default branch)')
+    def create_cmd(yes, repo, dry_run, issue, head, draft, base):
+        create(head, base, draft, issue, repo, yes, dry_run)
