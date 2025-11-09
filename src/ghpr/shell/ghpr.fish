@@ -12,7 +12,12 @@ alias ghprcr='ghpr create'             # create new PR from description
 alias ghprcrn='ghpr create -n'         # dry-run: show what PR would be created
 alias ghprsh='ghpr show'               # show PR and gist URLs
 alias ghprshg='ghpr show -g'           # show only gist URL
-alias ghprc='ghpr clone'               # clone existing PR
+function ghprc                         # clone PR and cd into directory
+    set dir (ghpr clone $argv)
+    if test $status -eq 0 -a -n "$dir"
+        cd $dir
+    end
+end
 alias ghprp='ghpr push'                # push to PR (auto-adds footer if gist exists)
 alias ghprpn='ghpr push -n'            # dry-run push
 alias ghprl='ghpr pull'                # pull from PR (and optionally push back)
