@@ -76,8 +76,8 @@ def test_shell_integration_outputs():
     lines = result.stdout.strip().split('\n')
     # ghpri should be a function (allow for comments after the opening brace)
     assert any(line.strip().startswith('ghpri() {') for line in lines), "ghpri function definition not found"
-    # ghprc should be an alias
-    assert any('alias ghprc=' in line for line in lines), "ghprc alias definition not found"
+    # ghprc should also be a function (clones and cds into directory)
+    assert any(line.strip().startswith('ghprc() {') for line in lines), "ghprc function definition not found"
 
 
 def test_patterns_regex():
