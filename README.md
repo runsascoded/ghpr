@@ -77,6 +77,8 @@ ghpr upload screenshot.png
 # Output: ![screenshot.png](https://gist.githubusercontent.com/...)
 ```
 
+**Note:** GitHub serves gist raw files as `application/octet-stream`, so images render in markdown but videos won't preview inline. For videos, use GitHub's native drag-drop upload in the web UI instead.
+
 ## Directory Structure
 
 Cloned PRs and issues are stored as:
