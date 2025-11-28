@@ -209,4 +209,5 @@ def register(cli):
     @flag('--no-ingest', help='Disable attachment ingestion')
     @opt('-b', '--branch', help='Branch name for attachments (default: $GHPR_INGEST_BRANCH or "attachments")')
     def ingest_attachments_cmd(dry_run, no_ingest, branch):
+        """Download GitHub user-attachments and convert to gist URLs."""
         ingest_attachments(branch, no_ingest, dry_run)

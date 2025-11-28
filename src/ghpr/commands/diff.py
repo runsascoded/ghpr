@@ -127,4 +127,5 @@ def register(cli):
     @flag('--no-comments', help='Skip diffing comments')
     @opt('-c', '--color', type=Choice(['auto', 'always', 'never']), default='auto', help='When to use colored output (default: auto)')
     def diff_cmd(no_comments, color):
+        """Show differences between local and remote PR/Issue."""
         diff(color, no_comments)

@@ -159,4 +159,5 @@ def register(cli):
     @flag('-n', '--dry-run', help='Show what would be done')
     @flag('-g', '--gist', help='Also sync to gist')
     def pull_cmd(no_comments, gist_private, open_browser, footer, dry_run, gist):
+        """Pull latest PR/Issue description and comments from GitHub."""
         pull(gist, dry_run, footer, open_browser, gist_private, no_comments)

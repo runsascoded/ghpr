@@ -72,4 +72,5 @@ def register(cli):
     @cli.command(name='open')
     @flag('-g', '--gist', help='Open gist instead of PR')
     def open_cmd(gist):
+        """Open PR/Issue or gist in browser."""
         open_pr(gist)

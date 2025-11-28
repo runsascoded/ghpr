@@ -49,4 +49,5 @@ def register(cli):
     @cli.command(name='shell-integration')
     @arg('shell', type=Choice(['bash', 'zsh', 'fish']), required=False)
     def shell_integration_cmd(shell):
+        """Output shell aliases and functions for ghpr."""
         shell_integration(shell)

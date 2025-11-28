@@ -637,4 +637,5 @@ def register(cli):
     @flag('-n', '--dry-run', help='Show what would be done without making changes')
     @flag('-g', '--gist', help='Also sync to gist')
     def push_cmd(force_others, no_comments, gist_private, images, open_browser, no_footer, footer, dry_run, gist):
+        """Push local changes to GitHub PR/Issue and gist."""
         push(gist, dry_run, footer, no_footer, open_browser, images, gist_private, no_comments, force_others)

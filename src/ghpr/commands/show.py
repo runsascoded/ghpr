@@ -75,4 +75,5 @@ def register(cli):
     @cli.command()
     @flag('-g', '--gist', help='Only show gist URL')
     def show_cmd(gist):
+        """Show PR/Issue and gist URLs."""
         show(gist)

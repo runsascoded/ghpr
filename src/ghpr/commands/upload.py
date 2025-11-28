@@ -106,4 +106,5 @@ def register(cli):
     @opt('-b', '--branch', default='assets', help='Branch name in gist (default: assets)')
     @arg('files', nargs=-1, required=True)
     def upload_cmd(alt, format, branch, files):
+        """Upload files to gist and output URLs."""
         upload(files, branch, format, alt)
