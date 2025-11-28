@@ -13,8 +13,10 @@ alias ghprcrn='ghpr create -n'         # dry-run: show what PR would be created
 alias ghprsh='ghpr show'               # show PR and gist URLs
 alias ghprshg='ghpr show -g'           # show only gist URL
 function ghprc                         # clone PR and cd into directory
-    set dir (ghpr clone $argv)
-    if test $status -eq 0 -a -n "$dir"
+    set output (ghpr clone $argv)
+    set clone_status $status
+    set dir (echo "$output" | grep "^GHPR_DIR:" | sed 's/^GHPR_DIR://')
+    if test $clone_status -eq 0 -a -n "$dir" -a -d "$dir"
         cd $dir
     end
 end

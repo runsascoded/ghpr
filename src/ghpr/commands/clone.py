@@ -207,8 +207,8 @@ def clone(
     err(f"Successfully cloned {item_label} to {target_path}")
     err(f"URL: {item_data['url']}")
 
-    # Output directory path to stdout for shell integration
-    print(target_path)
+    # Output directory path to stdout for shell integration (with marker for reliable parsing)
+    print(f"GHPR_DIR:{target_path}")
 
     # Fetch and store comments (default enabled, skip if --no-comments)
     if not no_comments:
