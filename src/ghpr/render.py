@@ -186,10 +186,8 @@ def render_unified_diff(
             else:
                 log(line)
 
-        # Add git-style "No newline at end of file" indicator after the diff
-        if not remote_has_final_newline:
-            log(f"{CYAN}\\ No newline at end of file{RESET}")
-        if remote_has_final_newline and not local_has_final_newline:
+        # Add git-style "No newline at end of file" indicator when sides differ
+        if remote_has_final_newline != local_has_final_newline:
             log(f"{CYAN}\\ No newline at end of file{RESET}")
     elif remote_has_final_newline != local_has_final_newline:
         # Only difference is trailing newline - show minimal diff
