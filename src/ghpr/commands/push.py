@@ -241,7 +241,8 @@ def push(
     if not no_comments:
         if dry_run:
             # In dry-run mode, just show the diff
-            render_comment_diff(owner, repo, number, item_type, use_color=use_color, dry_run=True)
+            current_user = get_current_github_user()
+            render_comment_diff(owner, repo, number, item_type, use_color=use_color, dry_run=True, current_user=current_user)
         else:
             err("Checking for comment changes...")
             current_user = get_current_github_user()
@@ -319,6 +320,7 @@ def push(
 
             comments_pushed = 0
             comments_skipped = 0
+            others_skipped = 0
 
             for comment_file_path in comment_files:
                 comment_id = get_comment_id_from_filename(comment_file_path)
@@ -341,14 +343,13 @@ def push(
                     comment_url = remote_comment.get('html_url', f'Comment {comment_id}')
 
                     if body == remote_body:
-                        err(f"Skipping {comment_file_path} - no changes")
                         comments_skipped += 1
                         continue
 
                     # Check if we own this comment (only matters if there are changes)
                     if author != current_user and not force_others:
-                        err(f"Skipping {comment_file_path} (author: {author}, not you). Use --force-others to try anyway.")
-                        comments_skipped += 1
+                        err(f"Skipping {comment_file_path} (author: {author}, not you)")
+                        others_skipped += 1
                         continue
 
                     if dry_run:
@@ -386,7 +387,9 @@ def push(
                     err("  Cannot push new comments yet (ID would change)")
                     comments_skipped += 1
 
-            err(f"Comments: {comments_pushed} pushed, {comments_skipped} skipped")
+            err(f"Comments: {comments_pushed} pushed, {comments_skipped} unchanged")
+            if others_skipped:
+                err(f"⚠ {others_skipped} comment(s) with local changes skipped (not yours). Use `ghprp -C` to force.")
 
         # Commit the new comment renames (new*.md → z{id}-{author}.md)
         if new_comment_renames and not dry_run:

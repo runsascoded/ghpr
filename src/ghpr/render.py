@@ -16,6 +16,7 @@ def render_comment_diff(
     item_type: str,
     use_color: bool = True,
     dry_run: bool = False,
+    current_user: str | None = None,
 ) -> tuple[int, int]:
     """Render comment differences between local and remote.
 
@@ -67,6 +68,7 @@ def render_comment_diff(
     comment_files = sorted(glob('z*.md'))
 
     changes_count = 0
+    others_with_diffs = []
     if comment_files:
         local_comment_ids = set()
         for comment_file_path in comment_files:
@@ -84,8 +86,13 @@ def render_comment_diff(
                 comment_url = remote_comment.get('html_url', f'Comment {comment_id}')
 
                 if local_body != remote_body:
+                    is_others = current_user and author != current_user
+                    if is_others:
+                        others_with_diffs.append(comment_file_path)
                     changes_count += 1
                     err(f"\n{BOLD}{YELLOW}Comment {comment_id} (by {author}) - Differences:{RESET}")
+                    if is_others:
+                        err(f"{YELLOW}  ⚠ Not your comment; won't be pushed without `-C`{RESET}")
                     render_unified_diff(
                         remote_body,
                         local_body,
@@ -105,6 +112,10 @@ def render_comment_diff(
             if comment_id not in local_comment_ids:
                 author = remote_comment.get('user', {}).get('login', 'unknown')
                 err(f"{YELLOW}Comment {comment_id} (by {author}) exists remotely but not locally{RESET}")
+
+    if others_with_diffs:
+        n = len(others_with_diffs)
+        err(f"\n{BOLD}{YELLOW}⚠ {n} comment(s) with local changes won't be pushed (not yours). Use `ghprp -C` to force.{RESET}")
 
     return drafts_count, changes_count
 

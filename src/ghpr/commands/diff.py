@@ -5,7 +5,7 @@ from click import Choice
 from utz import proc, err
 from utz.cli import opt, flag
 
-from ..api import get_item_metadata
+from ..api import get_item_metadata, get_current_github_user
 from ..config import get_pr_info_from_path
 from ..files import read_description_from_git
 from ..gist import extract_gist_footer
@@ -117,7 +117,8 @@ def diff(
         if not item_type:
             _, item_type = get_item_metadata(owner, repo, pr_number)
 
-        render_comment_diff(owner, repo, pr_number, item_type, use_color=use_color)
+        current_user = get_current_github_user()
+        render_comment_diff(owner, repo, pr_number, item_type, use_color=use_color, current_user=current_user)
 
 
 def register(cli):
