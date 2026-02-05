@@ -111,6 +111,11 @@ def write_description_with_link_ref(
             if not body or not body.endswith('\n\n'):
                 f.write('\n')
             f.write(f'{link_def}\n')
+        else:
+            # Link exists in body; ensure file ends with newline
+            # (GitHub strips trailing newlines from PR descriptions)
+            if not body.endswith('\n'):
+                f.write('\n')
 
 
 def read_description_file(path: Path = None, expect_plain: bool = False) -> tuple[str | None, str | None]:
