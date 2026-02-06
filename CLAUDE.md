@@ -43,6 +43,7 @@ The gist is a **read replica** of the local clone. `push`/`pull` operations sync
 ├── README.md
 ├── CLAUDE.md           # This file
 ├── ghpr.py             # Standalone uv run script
+├── tests/               # pytest test suite
 └── src/ghpr/
     ├── __init__.py
     ├── cli.py          # Main CLI entry point, registers commands
@@ -55,7 +56,7 @@ The gist is a **read replica** of the local clone. `push`/`pull` operations sync
     ├── render.py       # Diff rendering utilities
     └── commands/       # Modular command implementations
         ├── clone.py
-        ├── create.py
+        ├── create.py        # Also contains `init` command
         ├── diff.py
         ├── ingest_attachments.py
         ├── open.py
@@ -68,22 +69,25 @@ The gist is a **read replica** of the local clone. `push`/`pull` operations sync
 
 ### Recent Changes
 
-**Draft Comment Workflow** (completed):
+**Comment Ownership Warnings** (latest):
+- `ghpr diff` and `ghpr push -n` warn when showing diffs for comments authored by others
+- `ghpr push` skips others' comments by default, with clear summary message
+- Use `-C` (`--force-others`) to attempt pushing edits to others' comments
+
+**Trailing Newline Handling** (latest):
+- `write_description_with_link_ref` ensures files always end with a newline
+- Fixes diff thrashing when GitHub strips trailing newlines from PR descriptions
+- `render_unified_diff` only shows "No newline" indicator when sides actually differ
+
+**Draft Comment Workflow**:
 - Create files starting with `new` and ending in `.md` (e.g., `new.md`, `new-feature.md`)
 - Commit them to git
 - `ghpr push` automatically:
   1. Posts them as comments to GitHub
   2. Creates a commit renaming `new*.md` → `z{comment_id}-{author}.md`
   3. Syncs to gist
-- Handles local modifications gracefully (uses `git rm -f`)
 
-**Unified Diff Display** (completed):
-- Both `diff` and `push -n` show identical output
-- Draft comments displayed in green
-- Comment changes shown with unified diff
-- Metadata (line counts, etc.) in bold
-
-**Image Upload** (completed):
+**Image Upload**:
 - `ghpr upload <file>` uploads to gist and returns markdown URLs
 - Uses `utz.git.gist` module for shared functionality
 - Auto-formats as markdown for images, URL for other files

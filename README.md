@@ -16,10 +16,11 @@
 
 - **Clone** PR/Issues locally with comments
 - **Sync** bidirectionally between GitHub and local files
-- **Diff** local changes vs remote
+- **Diff** local changes vs remote (with ownership warnings for others' comments)
 - **Push** updates back to GitHub
 - **Gist mirroring** for version control and sharing
 - **Comment management** - edit and sync PR/issue comments
+- **Draft comments** - create `new*.md` files, push to post as comments
 
 ## Installation
 
@@ -84,7 +85,7 @@ ghpr upload screenshot.png
 Cloned PRs and issues are stored as:
 ```
 gh/123/
-  owner-repo#123.md       # Main description
+  repo#123.md             # Main description
   z3404494861-user.md     # Comments (ID-author format)
   z3407382913-user.md
 ```

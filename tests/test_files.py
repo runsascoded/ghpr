@@ -199,6 +199,36 @@ class TestWriteDescriptionWithLinkRef:
             link_def = '[owner/myrepo#999]: https://github.com/owner/myrepo/pull/999'
             assert content.count(link_def) == 1
 
+    def test_body_with_existing_link_def_no_trailing_newline(self):
+        """Test that file ends with newline even when body (with link) lacks one.
+
+        GitHub strips trailing newlines from PR descriptions. When the body
+        already contains the link definition but lacks a trailing newline,
+        we should still ensure the file ends with one.
+        """
+        with TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            filepath = tmppath / 'myrepo#888.md'
+            # Body has link def but no trailing newline (simulates GitHub stripping it)
+            body = 'Some content.\n\n[owner/myrepo#888]: https://github.com/owner/myrepo/pull/888'
+
+            write_description_with_link_ref(
+                filepath,
+                owner='owner',
+                repo='myrepo',
+                pr_number='888',
+                title='No Trailing Newline',
+                body=body,
+                url='https://github.com/owner/myrepo/pull/888'
+            )
+
+            content = filepath.read_text()
+            # File should end with newline
+            assert content.endswith('\n'), "File should end with a newline"
+            # Link def should appear exactly once
+            link_def = '[owner/myrepo#888]: https://github.com/owner/myrepo/pull/888'
+            assert content.count(link_def) == 1
+
 
 class TestReadDescriptionFile:
     """Test reading and parsing description files."""

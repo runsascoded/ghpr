@@ -45,3 +45,6 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 ghpr = ["shell/*.bash", "shell/*.fish"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
