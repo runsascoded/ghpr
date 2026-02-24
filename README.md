@@ -114,19 +114,20 @@ ghpr shell-integration fish | source
 
 ### Available Aliases
 
-After enabling shell integration, you get convenient shortcuts:
+After enabling shell integration, you get convenient shortcuts and tab completion for subcommands:
 
 ```bash
-ghpri      # ghpr init
-ghpro      # ghpr open
-ghprog     # ghpr open -g
+ghprc      # ghpr clone (+ cd into directory)
+ghpri      # ghpr init (+ cd into gh/new)
 ghprcr     # ghpr create
-ghprsh     # ghpr show
-ghprc      # ghpr clone
+ghprd      # ghpr diff
 ghprp      # ghpr push
 ghprl      # ghpr pull
-ghprd      # ghpr diff
-# ... and more
+ghpro      # ghpr open
+ghprsh     # ghpr show
+ghpru      # ghpr upload
+ghia       # ghpr ingest-attachments
+# ... and more (-n, -g, -o variants)
 ```
 
 See the full list with:

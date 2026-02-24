@@ -28,4 +28,5 @@ alias ghprpo='ghpr push -o'            # push and open in browser
 alias ghprpF='ghpr push -F'            # push WITHOUT footer
 alias ghprd='ghpr diff'                # diff local vs remote PR
 alias ghpria='ghpr ingest-attachments' # ingest user-attachments from PR
+alias ghia='ghpr ingest-attachments'   # short alias for ingest-attachments
 alias ghpru='ghpr upload'              # upload images to PR's gist

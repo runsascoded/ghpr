@@ -133,6 +133,59 @@ def cli():
     pass
 
 
+# Patch Click to suggest options on bare <tab> (not just after `-`).
+# By default Click only suggests options when the user has typed `-`, and
+# when a positional argument is pending it only completes that argument's
+# type (which for plain strings returns nothing). This patch makes both
+# Command.shell_complete and Argument.shell_complete include options.
+def _patch_shell_complete():
+    from click import Argument, Command, Option
+    from click.core import ParameterSource
+    from click.shell_completion import CompletionItem
+
+    def _get_option_completions(cmd, ctx):
+        results = []
+        for param in cmd.get_params(ctx):
+            if (
+                not isinstance(param, Option)
+                or param.hidden
+                or (
+                    not param.multiple
+                    and ctx.get_parameter_source(param.name)
+                    is ParameterSource.COMMANDLINE
+                )
+            ):
+                continue
+            results.extend(
+                CompletionItem(name, help=param.help)
+                for name in [*param.opts, *param.secondary_opts]
+            )
+        return results
+
+    _orig_cmd = Command.shell_complete
+
+    def _patched_cmd(self, ctx, incomplete):
+        results = _orig_cmd(self, ctx, incomplete)
+        if not incomplete:
+            results.extend(_get_option_completions(self, ctx))
+        return results
+
+    Command.shell_complete = _patched_cmd
+
+    _orig_arg = Argument.shell_complete
+
+    def _patched_arg(self, ctx, incomplete):
+        results = _orig_arg(self, ctx, incomplete)
+        if not incomplete:
+            results.extend(_get_option_completions(ctx.command, ctx))
+        return results
+
+    Argument.shell_complete = _patched_arg
+
+
+_patch_shell_complete()
+
+
 
 
 # Register modular commands
