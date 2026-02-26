@@ -31,7 +31,9 @@ The gist is a **read replica** of the local clone. `push`/`pull` operations sync
 - ✅ Draft comment workflow: `new*.md` → post → rename
 - ✅ Unified diff display between `diff` and `push -n`
 - ✅ Image upload command using `utz.git.gist`
-- ✅ PyPI package `ghpr-py` published (v0.1.0)
+- ✅ Shell completion (Click-powered, subcommands + flags/options on bare `<tab>`)
+- ✅ Shell integration with aliases (`ghprc`, `ghprd`, `ghprp`, `ghia`, etc.)
+- ✅ PyPI package `ghpr-py` published
 - ✅ Repository created with filtered history
 - ✅ Modular package structure (commands in separate modules)
 - ✅ Using published `utz>=0.21.3` for git utilities
@@ -54,6 +56,7 @@ The gist is a **read replica** of the local clone. `push`/`pull` operations sync
     ├── config.py       # Git config helpers
     ├── patterns.py     # Regex patterns
     ├── render.py       # Diff rendering utilities
+    ├── shell/          # Shell integration scripts (bash, fish)
     └── commands/       # Modular command implementations
         ├── clone.py
         ├── create.py        # Also contains `init` command
@@ -69,12 +72,19 @@ The gist is a **read replica** of the local clone. `push`/`pull` operations sync
 
 ### Recent Changes
 
-**Comment Ownership Warnings** (latest):
+**Shell Completion** (latest):
+- Click-powered tab completion for subcommands, flags, and options
+- Patched `Command.shell_complete` and `Argument.shell_complete` in `cli.py` to suggest options on bare `<tab>` (Click only does this when user types `-`)
+- Completion script generated inline by `shell_integration.py` (avoids extra Python invocation)
+- Click's Bash version warning suppressed (macOS system bash 3.2 triggers it)
+- `ghia` alias added for `ghpr ingest-attachments`
+
+**Comment Ownership Warnings**:
 - `ghpr diff` and `ghpr push -n` warn when showing diffs for comments authored by others
 - `ghpr push` skips others' comments by default, with clear summary message
 - Use `-C` (`--force-others`) to attempt pushing edits to others' comments
 
-**Trailing Newline Handling** (latest):
+**Trailing Newline Handling**:
 - `write_description_with_link_ref` ensures files always end with a newline
 - Fixes diff thrashing when GitHub strips trailing newlines from PR descriptions
 - `render_unified_diff` only shows "No newline" indicator when sides actually differ

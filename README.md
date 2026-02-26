@@ -21,6 +21,7 @@
 - **Gist mirroring** for version control and sharing
 - **Comment management** - edit and sync PR/issue comments
 - **Draft comments** - create `new*.md` files, push to post as comments
+- **Shell integration** - aliases and tab completion for subcommands, flags, and options
 
 ## Installation
 
@@ -114,7 +115,7 @@ ghpr shell-integration fish | source
 
 ### Available Aliases
 
-After enabling shell integration, you get convenient shortcuts and tab completion for subcommands:
+After enabling shell integration, you get convenient shortcuts and tab completion for subcommands, flags, and options:
 
 ```bash
 ghprc      # ghpr clone (+ cd into directory)
