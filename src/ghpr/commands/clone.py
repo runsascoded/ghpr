@@ -15,7 +15,35 @@ from ..comments import write_comment_file
 from ..config import get_pr_info_from_path
 from ..files import get_expected_description_filename, write_description_with_link_ref
 from ..gist import extract_gist_footer, add_gist_footer, create_gist, DEFAULT_GIST_REMOTE, find_gist_remote
-from ..patterns import parse_pr_spec, GIST_ID_PATTERN
+from ..patterns import parse_pr_spec, GIST_ID_PATTERN, GITHUB_ITEM_URL_PATTERN
+
+
+def _detect_current_branch_pr() -> tuple[str | None, str | None, str | None, str | None]:
+    """Try to find an open PR for the current branch.
+
+    Uses `gh pr view` which finds the PR associated with the current branch.
+
+    Returns:
+        Tuple of (owner, repo, number, item_type) or (None, None, None, None).
+    """
+    from subprocess import DEVNULL
+    try:
+        data = proc.json(
+            'gh', 'pr', 'view', '--json', 'number,url',
+            log=None, err_ok=True, stderr=DEVNULL,
+        )
+        if data and data.get('number'):
+            url = data.get('url', '')
+            match = GITHUB_ITEM_URL_PATTERN.match(url)
+            if match:
+                owner, repo, _, number = match.groups()
+                return owner, repo, number, 'pr'
+            # Fallback: use repo view for owner/repo
+            repo_data = proc.json('gh', 'repo', 'view', '--json', 'owner,name', log=None)
+            return repo_data['owner']['login'], repo_data['name'], str(data['number']), 'pr'
+    except Exception:
+        pass
+    return None, None, None, None
 
 
 def clone(
@@ -49,9 +77,12 @@ def clone(
                 err("Use owner/repo#number format.")
                 exit(1)
     else:
-        # Try to infer from current directory
-        owner, repo, number = get_pr_info_from_path()
-        item_type = None
+        # Try to detect PR for the current branch
+        owner, repo, number, item_type = _detect_current_branch_pr()
+        if not number:
+            # Fall back to inferring from directory structure
+            owner, repo, number = get_pr_info_from_path()
+            item_type = None
 
     if not all([owner, repo, number]):
         err("Error: Could not determine PR/Issue to clone")
@@ -121,9 +152,9 @@ def clone(
     proc.run('git', 'commit', '-m', f'Initial clone of {item_label} {owner}/{repo}#{number}', log=None)
 
     # Create or use existing gist unless --no-gist was specified
+    gist_url = None
     if not no_gist:
         gist_id = None
-        gist_url = None
 
         # Check if PR already has a gist in its footer
         if existing_gist_url:
