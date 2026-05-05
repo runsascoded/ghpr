@@ -8,7 +8,69 @@ import os
 from click.testing import CliRunner
 
 from ghpr.cli import cli
-from ghpr.commands.create import create_new_pr, create_new_issue
+from ghpr.commands.create import create_new_pr, create_new_issue, _resolve_draft_path
+
+
+class TestResolveDraftPath:
+    """Unit tests for _resolve_draft_path."""
+
+    def test_default_is_gh_new(self):
+        assert _resolve_draft_path(None) == Path('gh/new')
+
+    def test_empty_string_is_default(self):
+        assert _resolve_draft_path('') == Path('gh/new')
+
+    def test_bare_slug_resolves_to_gh_new_dash_slug(self):
+        assert _resolve_draft_path('foo') == Path('gh/new-foo')
+        assert _resolve_draft_path('my-feature') == Path('gh/new-my-feature')
+
+    def test_path_with_slash_is_used_as_is(self):
+        assert _resolve_draft_path('gh/new-foo') == Path('gh/new-foo')
+        assert _resolve_draft_path('drafts/foo') == Path('drafts/foo')
+        assert _resolve_draft_path('/abs/path') == Path('/abs/path')
+
+
+class TestInitSlugMode:
+    """Test init with slug-based path argument for parallel drafts."""
+
+    def test_init_with_slug_creates_gh_new_dash_slug(self, tmp_path):
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            with patch('ghpr.commands.create.proc'):
+                result = runner.invoke(cli, ['init', '-r', 'o/r', 'foo'])
+                assert result.exit_code == 0, result.output
+                assert Path('gh/new-foo').is_dir()
+                assert Path('gh/new-foo/DESCRIPTION.md').exists()
+                assert not Path('gh/new').exists()
+                assert 'GHPR_DIR:gh/new-foo' in result.stdout
+
+    def test_init_two_drafts_in_parallel(self, tmp_path):
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            with patch('ghpr.commands.create.proc'):
+                r1 = runner.invoke(cli, ['init', '-r', 'o/r', 'foo'])
+                r2 = runner.invoke(cli, ['init', '-r', 'o/r', 'bar'])
+                assert r1.exit_code == 0
+                assert r2.exit_code == 0
+                assert Path('gh/new-foo/DESCRIPTION.md').exists()
+                assert Path('gh/new-bar/DESCRIPTION.md').exists()
+
+    def test_init_default_prints_ghpr_dir_marker(self, tmp_path):
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            with patch('ghpr.commands.create.proc'):
+                result = runner.invoke(cli, ['init', '-r', 'o/r'])
+                assert result.exit_code == 0
+                assert 'GHPR_DIR:gh/new' in result.stdout
+
+    def test_init_slug_collision_errors_out(self, tmp_path):
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            Path('gh/new-foo').mkdir(parents=True)
+            Path('gh/new-foo/DESCRIPTION.md').write_text('# existing\n')
+            with patch('ghpr.commands.create.proc'):
+                result = runner.invoke(cli, ['init', '-r', 'o/r', 'foo'])
+                assert result.exit_code != 0
 
 
 class TestInit:

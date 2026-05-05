@@ -3,8 +3,13 @@
 # Or use: ghpr shell-integration fish | source
 
 # Core ghpr aliases for common operations
-function ghpri                         # initialize new PR draft and cd to gh/new
-    ghpr init $argv && cd gh/new
+function ghpri                         # initialize new PR draft and cd into it (gh/new by default; pass slug for gh/new-<slug>)
+    set output (ghpr init $argv)
+    set init_status $status
+    set dir (echo "$output" | grep "^GHPR_DIR:" | sed 's/^GHPR_DIR://')
+    if test $init_status -eq 0 -a -n "$dir" -a -d "$dir"
+        cd $dir
+    end
 end
 alias ghpro='ghpr open'                # open existing PR in browser
 alias ghprog='ghpr open -g'            # open gist in browser

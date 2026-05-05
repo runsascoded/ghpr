@@ -4,10 +4,24 @@ import re
 from os.path import exists, join
 from pathlib import Path
 from utz import proc, err, cd
-from utz.cli import opt, flag
+from utz.cli import opt, flag, arg
 
 from ..files import read_description_file, write_description_with_link_ref
 from ..patterns import GIST_ID_PATTERN
+
+
+def _resolve_draft_path(path: str | None) -> Path:
+    """Resolve a draft directory path argument.
+
+    - None → `gh/new` (default, single-draft mode)
+    - Contains `/` → use as-is (absolute or relative path)
+    - Bare slug → `gh/new-<slug>` (multi-draft mode)
+    """
+    if not path:
+        return Path('gh/new')
+    if '/' in path:
+        return Path(path)
+    return Path('gh') / f'new-{path}'
 
 # Import resolve_remote_ref from utz
 try:
@@ -211,17 +225,23 @@ def _finalize_created_item(
 def init(
     repo: str | None,
     base: str | None,
+    path: str | None = None,
 ) -> None:
-    """Initialize a new PR draft in gh/new/ directory."""
-    # Create gh/new/ directory
-    new_dir = Path('gh/new')
+    """Initialize a new PR draft.
+
+    By default the draft is created at `gh/new/`. Pass a slug or path to
+    stage multiple drafts in parallel:
+      - bare slug `foo` → `gh/new-foo/`
+      - path containing `/` → used as-is
+    """
+    new_dir = _resolve_draft_path(path)
     if new_dir.exists():
         if (new_dir / 'DESCRIPTION.md').exists():
-            err("Error: gh/new/DESCRIPTION.md already exists. Are you already managing a PR here?")
+            err(f"Error: {new_dir}/DESCRIPTION.md already exists. Are you already managing a PR here?")
             exit(1)
     else:
         new_dir.mkdir(parents=True)
-        err("Created gh/new/")
+        err(f"Created {new_dir}/")
 
     # Get and store repo config BEFORE creating .git
     if repo:
@@ -312,10 +332,13 @@ def init(
 
     err("")
     err("Next steps:")
-    err("  cd gh/new")
+    err(f"  cd {new_dir}")
     err("  vim DESCRIPTION.md  # Edit title and description")
     err("  git commit -am 'Update PR description'")
     err("  ghpr create")
+
+    # Output directory path to stdout for shell integration (with marker for reliable parsing)
+    print(f"GHPR_DIR:{new_dir}")
 
 
 def create(
@@ -326,11 +349,15 @@ def create(
     repo: str | None,
     yes: int,
     dry_run: bool,
+    path: str | None = None,
 ) -> None:
     """Create a new PR or Issue from the current draft.
 
     By default, opens GitHub's web editor for interactive creation.
     Use -y to skip the web editor and create via API instead.
+
+    If PATH is given, cd into the resolved draft directory first
+    (e.g. `ghpr create foo` operates on `gh/new-foo/`).
     """
     # Validate draft flag with web editor mode
     if draft and yes == 0:
@@ -338,10 +365,21 @@ def create(
         err("Use: ghpr create -d -y  (or -yy for silent creation)")
         exit(1)
 
-    if issue:
-        create_new_issue(repo, yes, dry_run)
+    def _do_create():
+        if issue:
+            create_new_issue(repo, yes, dry_run)
+        else:
+            create_new_pr(head, base, draft, repo, yes, dry_run)
+
+    if path:
+        draft_dir = _resolve_draft_path(path)
+        if not draft_dir.exists():
+            err(f"Error: {draft_dir} does not exist. Run `ghpr init {path}` first.")
+            exit(1)
+        with cd(draft_dir):
+            _do_create()
     else:
-        create_new_pr(head, base, draft, repo, yes, dry_run)
+        _do_create()
 
 
 def create_new_pr(
@@ -665,9 +703,10 @@ def register(cli):
     @cli.command()
     @opt('-r', '--repo', help='Repository (owner/repo format)')
     @opt('-b', '--base', help='Base branch (default: repo default branch)')
-    def init_cmd(repo, base):
-        """Initialize a new PR/Issue draft in gh/new."""
-        init(repo, base)
+    @arg('path', required=False)
+    def init_cmd(repo, base, path):
+        """Initialize a new PR/Issue draft (default: gh/new; PATH=slug → gh/new-<slug>)."""
+        init(repo, base, path)
 
     # Register create command
     @cli.command(name='create')
@@ -678,6 +717,7 @@ def register(cli):
     @opt('-h', '--head', help='Head branch (default: auto-detect from parent repo)')
     @flag('-d', '--draft', help='Create as draft PR (requires -y; incompatible with web editor)')
     @opt('-b', '--base', help='Base branch (default: repo default branch)')
-    def create_cmd(yes, repo, dry_run, issue, head, draft, base):
-        """Create a PR or Issue from gh/new draft."""
-        create(head, base, draft, issue, repo, yes, dry_run)
+    @arg('path', required=False)
+    def create_cmd(yes, repo, dry_run, issue, head, draft, base, path):
+        """Create a PR or Issue from a draft directory (default: cwd; PATH=slug → gh/new-<slug>)."""
+        create(head, base, draft, issue, repo, yes, dry_run, path)
