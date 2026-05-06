@@ -13,15 +13,15 @@ from ..patterns import GIST_ID_PATTERN
 def _resolve_draft_path(path: str | None) -> Path:
     """Resolve a draft directory path argument.
 
-    - None → `gh/new` (default, single-draft mode)
+    - None → `gh/new` (default, single-draft mode, back-compat)
     - Contains `/` → use as-is (absolute or relative path)
-    - Bare slug → `gh/new-<slug>` (multi-draft mode)
+    - Bare slug → `gh/drafts/<slug>` (multi-draft mode)
     """
     if not path:
         return Path('gh/new')
     if '/' in path:
         return Path(path)
-    return Path('gh') / f'new-{path}'
+    return Path('gh/drafts') / path
 
 # Import resolve_remote_ref from utz
 try:
@@ -205,19 +205,23 @@ def _finalize_created_item(
     else:
         err("No gist remote found, skipping gist push")
 
-    # Rename directory from gh/new to gh/{number}
+    # Rename draft directory to gh/{number}, regardless of where it lives
+    # under gh/ (e.g. gh/new/, gh/drafts/<slug>/, gh/new-<slug>/ legacy)
     current_dir = Path.cwd()
-    parent_dir = current_dir.parent
     current_name = current_dir.name
 
-    # Check if we're in a gh/* subdirectory
-    if parent_dir.name == 'gh' and current_name != number:
-        new_dir = parent_dir / number
+    gh_ancestor = next(
+        (p for p in [current_dir.parent, *current_dir.parents] if p.name == 'gh'),
+        None,
+    )
+    if gh_ancestor and current_name != number:
+        new_dir = gh_ancestor / number
         if not new_dir.exists():
             # Note: After this, our cwd will be invalid, but we're done anyway
             import os
+            old_rel = current_dir.relative_to(gh_ancestor.parent)
             os.rename(str(current_dir), str(new_dir))
-            err(f"Renamed directory: gh/{current_name} → gh/{number}")
+            err(f"Renamed directory: {old_rel} → gh/{number}")
         else:
             err(f"Warning: Directory gh/{number} already exists, not renaming")
 
@@ -231,7 +235,7 @@ def init(
 
     By default the draft is created at `gh/new/`. Pass a slug or path to
     stage multiple drafts in parallel:
-      - bare slug `foo` → `gh/new-foo/`
+      - bare slug `foo` → `gh/drafts/foo/`
       - path containing `/` → used as-is
     """
     new_dir = _resolve_draft_path(path)
@@ -705,7 +709,7 @@ def register(cli):
     @opt('-b', '--base', help='Base branch (default: repo default branch)')
     @arg('path', required=False)
     def init_cmd(repo, base, path):
-        """Initialize a new PR/Issue draft (default: gh/new; PATH=slug → gh/new-<slug>)."""
+        """Initialize a new PR/Issue draft (default: gh/new; PATH=slug → gh/drafts/<slug>)."""
         init(repo, base, path)
 
     # Register create command
@@ -719,5 +723,5 @@ def register(cli):
     @opt('-b', '--base', help='Base branch (default: repo default branch)')
     @arg('path', required=False)
     def create_cmd(yes, repo, dry_run, issue, head, draft, base, path):
-        """Create a PR or Issue from a draft directory (default: cwd; PATH=slug → gh/new-<slug>)."""
+        """Create a PR or Issue from a draft directory (default: cwd; PATH=slug → gh/drafts/<slug>)."""
         create(head, base, draft, issue, repo, yes, dry_run, path)
