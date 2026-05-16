@@ -33,6 +33,9 @@ The gist is a **read replica** of the local clone. `push`/`pull` operations sync
 - ✅ Image upload command using `utz.git.gist`
 - ✅ Shell completion (Click-powered, subcommands + flags/options on bare `<tab>`)
 - ✅ Shell integration with aliases (`ghprc`, `ghprd`, `ghprp`, `ghia`, etc.)
+- ✅ Parallel drafts: `ghpr init <slug>` → `gh/drafts/<slug>/`
+- ✅ `ghpr clone` auto-detects current branch's PR when no spec given
+- ✅ `ghpr create` auto-inits nested git repo (works when parent has `gh/` gitignored)
 - ✅ PyPI package `ghpr-py` published
 - ✅ Repository created with filtered history
 - ✅ Modular package structure (commands in separate modules)
@@ -72,7 +75,21 @@ The gist is a **read replica** of the local clone. `push`/`pull` operations sync
 
 ### Recent Changes
 
-**Shell Completion** (latest):
+**Auto-init nested git repo on `ghpr create`** (latest):
+- `_ensure_nested_git_repo()` in `commands/create.py` runs `git init` at the draft dir if it's not already its own git toplevel
+- Lets `ghpr create` work even when the parent project has `gh/` in `.gitignore` (the typical setup)
+- `git rm DESCRIPTION.md` now uses `-q --ignore-unmatch` so it handles both tracked (existing `ghpr init` repo) and untracked (fresh nested repo) cases
+
+**Parallel drafts under `gh/drafts/<slug>/`**:
+- `ghpr init <slug>` and `ghpr create <slug>` resolve to `gh/drafts/<slug>/` (was `gh/new-<slug>/` briefly in v0.1.9)
+- Keeps drafts visually separated from filed `gh/<number>/` dirs
+- `ghpr init` (no arg) still creates `gh/new/` for back-compat
+- Finalize logic walks up to find the `gh/` ancestor, so all layouts rename to `gh/<number>/` on filing
+
+**`ghpr clone` auto-detects branch's PR**:
+- `ghprc` (no args) uses `gh pr view` to find the open PR for the current branch and clone it
+
+**Shell Completion**:
 - Click-powered tab completion for subcommands, flags, and options
 - Patched `Command.shell_complete` and `Argument.shell_complete` in `cli.py` to suggest options on bare `<tab>` (Click only does this when user types `-`)
 - Completion script generated inline by `shell_integration.py` (avoids extra Python invocation)

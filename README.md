@@ -34,10 +34,12 @@ pip install ghpr-py
 ### Basic Workflow
 
 ```bash
-# Clone a PR or issue (to `gh/123` by default
+# Clone a PR or issue (to `gh/123` by default)
 ghpr clone https://github.com/owner/repo/pull/123
 # or
 ghpr clone owner/repo#123
+# or, from inside a repo on a branch with an open PR, no args:
+ghpr clone
 
 # Make edits to:
 # - Title / Description: `gh/123/repo#123.md`
@@ -85,13 +87,29 @@ ghpr upload screenshot.png
 
 Cloned PRs and issues are stored as:
 ```
-gh/123/
-  repo#123.md             # Main description
-  z3404494861-user.md     # Comments (ID-author format)
-  z3407382913-user.md
+gh/
+  123/                    # Filed PRs/issues (numbered)
+    repo#123.md           # Main description
+    z3404494861-user.md   # Comments (ID-author format)
+    z3407382913-user.md
+  drafts/                 # In-flight drafts (not yet filed)
+    my-feature/
+      DESCRIPTION.md
+  new/                    # Default single-draft slot (ghpr init with no arg)
+    DESCRIPTION.md
 ```
 
-Since PRs are issues in GitHub's API, we use the same `gh/{number}/` pattern for both.
+Since PRs are issues in GitHub's API, we use the same `gh/{number}/` pattern for both. Each `gh/<number>/` and `gh/drafts/<slug>/` is its own nested git repo, so the parent project can safely add `gh/` to its `.gitignore` — `ghpr clone` and `ghpr create` set up nested git tracking automatically.
+
+### Parallel drafts
+
+Pass a slug to stage multiple drafts at once:
+
+```bash
+ghpr init my-feature       # creates gh/drafts/my-feature/
+ghpr init another-issue    # creates gh/drafts/another-issue/
+ghpr create my-feature     # files the my-feature draft → renames to gh/<N>/
+```
 
 ## Shell Integration (Optional)
 
@@ -118,8 +136,8 @@ ghpr shell-integration fish | source
 After enabling shell integration, you get convenient shortcuts and tab completion for subcommands, flags, and options:
 
 ```bash
-ghprc      # ghpr clone (+ cd into directory)
-ghpri      # ghpr init (+ cd into gh/new)
+ghprc      # ghpr clone (no args = clone branch's PR; + cd into directory)
+ghpri      # ghpr init (+ cd into draft dir; pass slug for gh/drafts/<slug>/)
 ghprcr     # ghpr create
 ghprd      # ghpr diff
 ghprp      # ghpr push
