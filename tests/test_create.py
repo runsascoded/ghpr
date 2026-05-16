@@ -151,6 +151,12 @@ class TestCreateWithGitignoredGh:
         (draft_dir / 'DESCRIPTION.md').write_text('# Test Issue\n\nBody\n')
 
         monkeypatch.chdir(draft_dir)
+        # Identity for the nested repo `_ensure_nested_git_repo` will create
+        # (CI runners have no global git config)
+        for var in ('GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_EMAIL'):
+            monkeypatch.setenv(var, 't@example.com')
+        for var in ('GIT_AUTHOR_NAME', 'GIT_COMMITTER_NAME'):
+            monkeypatch.setenv(var, 'T')
 
         from ghpr.commands import create as create_mod
 
