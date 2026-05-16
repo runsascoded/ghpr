@@ -1,5 +1,6 @@
 """Tests for create command with mocked gh API calls."""
 
+import subprocess
 import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
@@ -8,7 +9,29 @@ import os
 from click.testing import CliRunner
 
 from ghpr.cli import cli
-from ghpr.commands.create import create_new_pr, create_new_issue, _resolve_draft_path
+from ghpr.commands.create import (
+    create_new_pr,
+    create_new_issue,
+    _resolve_draft_path,
+    _ensure_nested_git_repo,
+)
+
+
+def _run(*args, cwd=None):
+    """Run a command and assert success."""
+    subprocess.run(args, cwd=cwd, check=True, capture_output=True)
+
+
+def _toplevel(cwd) -> str | None:
+    """Return `git rev-parse --show-toplevel` (resolved), or None if not a repo."""
+    try:
+        out = subprocess.run(
+            ['git', 'rev-parse', '--show-toplevel'],
+            cwd=cwd, check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        return str(Path(out).resolve())
+    except subprocess.CalledProcessError:
+        return None
 
 
 class TestResolveDraftPath:
@@ -28,6 +51,182 @@ class TestResolveDraftPath:
         assert _resolve_draft_path('gh/drafts/foo') == Path('gh/drafts/foo')
         assert _resolve_draft_path('elsewhere/foo') == Path('elsewhere/foo')
         assert _resolve_draft_path('/abs/path') == Path('/abs/path')
+
+
+class TestEnsureNestedGitRepo:
+    """Tests for _ensure_nested_git_repo auto-init behavior."""
+
+    def test_inits_nested_repo_when_parent_owns_cwd(self, tmp_path):
+        """When the parent git repo owns cwd, init a nested repo here."""
+        # Parent repo with gh/ ignored
+        _run('git', 'init', '-q', cwd=tmp_path)
+        (tmp_path / '.gitignore').write_text('gh/\n')
+        draft_dir = tmp_path / 'gh' / 'drafts' / 'foo'
+        draft_dir.mkdir(parents=True)
+
+        # Sanity: from draft_dir, git toplevel is the parent
+        assert _toplevel(draft_dir) == str(tmp_path.resolve())
+
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(draft_dir)
+            _ensure_nested_git_repo('o', 'r', '42', 'https://x/42', 'issue')
+        finally:
+            os.chdir(old_cwd)
+
+        # Now draft_dir is its own toplevel
+        assert _toplevel(draft_dir) == str(draft_dir.resolve())
+        # Metadata was written to nested git config
+        assert (draft_dir / '.git').is_dir()
+        cfg = subprocess.run(
+            ['git', 'config', '--get', 'pr.number'],
+            cwd=draft_dir, capture_output=True, text=True,
+        ).stdout.strip()
+        assert cfg == '42'
+
+    def test_noop_when_cwd_is_already_nested_toplevel(self, tmp_path):
+        """If cwd is already its own toplevel, don't reinit."""
+        _run('git', 'init', '-q', cwd=tmp_path)
+        nested = tmp_path / 'nested'
+        nested.mkdir()
+        _run('git', 'init', '-q', cwd=nested)
+        # Mark this repo with a sentinel so we can detect a re-init
+        _run('git', 'config', 'sentinel.value', 'preserved', cwd=nested)
+
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(nested)
+            _ensure_nested_git_repo('o', 'r', '7', 'https://x/7', 'issue')
+        finally:
+            os.chdir(old_cwd)
+
+        # Sentinel survived (no reinit clobbered the config)
+        cfg = subprocess.run(
+            ['git', 'config', '--get', 'sentinel.value'],
+            cwd=nested, capture_output=True, text=True,
+        ).stdout.strip()
+        assert cfg == 'preserved'
+        # And the pr.* config from _ensure_nested_git_repo wasn't written
+        # (we only init metadata when we actually init a new repo)
+        result = subprocess.run(
+            ['git', 'config', '--get', 'pr.number'],
+            cwd=nested, capture_output=True, text=True,
+        )
+        assert result.returncode != 0, "pr.number should not have been set"
+
+    def test_inits_when_no_git_repo_at_all(self, tmp_path):
+        """If cwd isn't inside any git repo, init one here."""
+        draft_dir = tmp_path / 'orphan'
+        draft_dir.mkdir()
+        assert _toplevel(draft_dir) is None
+
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(draft_dir)
+            _ensure_nested_git_repo('o', 'r', '99', 'https://x/99', 'pr')
+        finally:
+            os.chdir(old_cwd)
+
+        assert _toplevel(draft_dir) == str(draft_dir.resolve())
+
+
+class TestCreateWithGitignoredGh:
+    """End-to-end: create from a draft when parent repo has `gh/` ignored.
+
+    This is the failure mode that `_ensure_nested_git_repo` was added to
+    fix: without it, `git rm DESCRIPTION.md` fails because the file
+    isn't tracked in the parent repo (it's gitignored).
+    """
+
+    def test_create_issue_succeeds_with_gh_gitignored(self, tmp_path, monkeypatch):
+        # Parent repo with gh/ ignored
+        _run('git', 'init', '-q', cwd=tmp_path)
+        _run('git', 'config', 'user.email', 't@example.com', cwd=tmp_path)
+        _run('git', 'config', 'user.name', 'T', cwd=tmp_path)
+        (tmp_path / '.gitignore').write_text('gh/\n')
+
+        # User has a manually-created draft (no `ghpr init`)
+        draft_dir = tmp_path / 'gh' / 'drafts' / 'test-issue'
+        draft_dir.mkdir(parents=True)
+        (draft_dir / 'DESCRIPTION.md').write_text('# Test Issue\n\nBody\n')
+
+        monkeypatch.chdir(draft_dir)
+
+        from ghpr.commands import create as create_mod
+
+        def fake_text(*args, **kwargs):
+            if args[:3] == ('gh', 'issue', 'create'):
+                return 'https://github.com/owner/repo/issues/42\n'
+            raise AssertionError(f'unexpected proc.text call: {args}')
+
+        with patch.object(create_mod.proc, 'text', side_effect=fake_text), \
+             patch.object(create_mod, 'get_owner_repo', return_value=('owner', 'repo')), \
+             patch('ghpr.commands.push.push'):
+            create_mod.create_new_issue(repo_arg=None, yes=2, dry_run=False)
+
+        # Draft dir was renamed to gh/42/
+        assert not draft_dir.exists()
+        final = tmp_path / 'gh' / '42'
+        assert final.is_dir()
+        assert (final / 'repo#42.md').exists()
+
+        # And the nested git repo has the file committed
+        assert (final / '.git').is_dir()
+        log = subprocess.run(
+            ['git', 'log', '--oneline'],
+            cwd=final, check=True, capture_output=True, text=True,
+        ).stdout
+        assert 'repo#42.md' in log
+
+    def test_create_issue_succeeds_with_existing_nested_repo(self, tmp_path, monkeypatch):
+        """Regression: existing nested git repo (from `ghpr init`) still works.
+
+        Verifies the `git rm --ignore-unmatch` change didn't break the
+        case where DESCRIPTION.md was already tracked in the nested repo.
+        """
+        # Parent repo with gh/ ignored
+        _run('git', 'init', '-q', cwd=tmp_path)
+        (tmp_path / '.gitignore').write_text('gh/\n')
+
+        # Draft with its OWN nested git repo and a committed DESCRIPTION.md
+        # (simulating what `ghpr init` would have produced)
+        draft_dir = tmp_path / 'gh' / 'drafts' / 'test-issue'
+        draft_dir.mkdir(parents=True)
+        (draft_dir / 'DESCRIPTION.md').write_text('# Test Issue\n\nBody\n')
+        _run('git', 'init', '-q', cwd=draft_dir)
+        _run('git', 'config', 'user.email', 't@example.com', cwd=draft_dir)
+        _run('git', 'config', 'user.name', 'T', cwd=draft_dir)
+        _run('git', 'add', 'DESCRIPTION.md', cwd=draft_dir)
+        _run('git', 'commit', '-q', '-m', 'init', cwd=draft_dir)
+
+        monkeypatch.chdir(draft_dir)
+
+        from ghpr.commands import create as create_mod
+
+        def fake_text(*args, **kwargs):
+            if args[:3] == ('gh', 'issue', 'create'):
+                return 'https://github.com/owner/repo/issues/7\n'
+            raise AssertionError(f'unexpected proc.text call: {args}')
+
+        with patch.object(create_mod.proc, 'text', side_effect=fake_text), \
+             patch.object(create_mod, 'get_owner_repo', return_value=('owner', 'repo')), \
+             patch('ghpr.commands.push.push'):
+            create_mod.create_new_issue(repo_arg=None, yes=2, dry_run=False)
+
+        # Renamed dir and committed file
+        final = tmp_path / 'gh' / '7'
+        assert (final / 'repo#7.md').exists()
+        assert not (final / 'DESCRIPTION.md').exists()
+
+        # The commit that finalized the rename should show DESCRIPTION.md
+        # deleted and repo#7.md added (i.e. the deletion was properly staged).
+        diff = subprocess.run(
+            ['git', 'log', '-1', '--name-status', '--format='],
+            cwd=final, check=True, capture_output=True, text=True,
+        ).stdout.strip().split('\n')
+        # Either two separate D + A lines or a rename R line; check both files appear
+        assert any('DESCRIPTION.md' in line for line in diff), diff
+        assert any('repo#7.md' in line for line in diff), diff
 
 
 class TestInitSlugMode:

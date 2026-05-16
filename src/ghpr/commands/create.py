@@ -23,6 +23,35 @@ def _resolve_draft_path(path: str | None) -> Path:
         return Path(path)
     return Path('gh/drafts') / path
 
+
+def _ensure_nested_git_repo(
+    owner: str,
+    repo: str,
+    number: str,
+    url: str,
+    item_type: str,
+) -> None:
+    """Ensure cwd is the toplevel of its own git repo; `git init` if not.
+
+    Without this, when the parent project has `gh/` in `.gitignore`, the
+    finalize step's git ops walk up to the parent repo and fail (the
+    files we're trying to add are gitignored there). Mirrors what
+    `ghpr clone` does so a create-then-finalize matches a clone exactly.
+    """
+    toplevel = proc.line('git', 'rev-parse', '--show-toplevel', err_ok=True, log=None)
+    cwd = str(Path.cwd().resolve())
+    if toplevel:
+        toplevel = str(Path(toplevel).resolve())
+    if toplevel == cwd:
+        return
+    proc.run('git', 'init', '-q', log=None)
+    proc.run('git', 'config', 'pr.owner', owner, log=None)
+    proc.run('git', 'config', 'pr.repo', repo, log=None)
+    proc.run('git', 'config', 'pr.number', str(number), log=None)
+    proc.run('git', 'config', 'pr.url', url, log=None)
+    proc.run('git', 'config', 'pr.type', item_type, log=None)
+    err(f"Initialized nested git repo at {cwd}")
+
 # Import resolve_remote_ref from utz
 try:
     from utz.git.branch import resolve_remote_ref
@@ -165,15 +194,21 @@ def _finalize_created_item(
         url
     )
 
-    # Remove old file if different name
+    # Ensure we're inside a nested git repo before git ops, so a
+    # gitignored `gh/` in the parent project doesn't break add/commit.
+    _ensure_nested_git_repo(owner, repo, number, url, item_type)
+
+    # Remove old file from index (if tracked) and from disk.
+    # --ignore-unmatch handles the case where it was never tracked
+    # (e.g. fresh nested git repo we just initialized, or gitignored).
     if old_file != new_file:
-        old_file.unlink()
+        proc.run('git', 'rm', '-q', '--ignore-unmatch', 'DESCRIPTION.md', log=None)
+        if old_file.exists():
+            old_file.unlink()
         err(f"Renamed DESCRIPTION.md to {new_filename}")
 
     # Git operations
     proc.run('git', 'add', new_filename, log=None)
-    if old_file != new_file:
-        proc.run('git', 'rm', 'DESCRIPTION.md', log=None)
     item_label = 'PR' if item_type == 'pr' else 'issue'
     proc.run('git', 'commit', '-m', f'Rename to {new_filename} and add {item_label} #{number} link', log=None)
     err(f"Updated {new_filename} with {item_label} link")
