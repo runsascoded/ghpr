@@ -65,7 +65,7 @@ def render_comment_diff(
     remote_comments_by_id = {str(c['id']): c for c in remote_comments}
 
     # Find all local comment files
-    comment_files = sorted(glob('z*.md'))
+    comment_files = sorted(glob('z[0-9]*.md'))
 
     changes_count = 0
     others_with_diffs = []

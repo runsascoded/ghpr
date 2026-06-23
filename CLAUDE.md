@@ -23,6 +23,7 @@ The gist is a **read replica** of the local clone. `push`/`pull` operations sync
 ### Completed
 - ✅ Basic clone/push/pull/diff commands
 - ✅ Comment support (fetch, diff, push comments)
+- ✅ Review-thread sync (inline PR comments): pull threads to `gh/<num>/reviews/<head_id>/`, edit/reply/resolve locally, push back (REST + GraphQL); `ghpr review reply|resolve|unresolve`
 - ✅ Gist mirroring
 - ✅ Issue and PR support
 - ✅ Comments default enabled (with `--no-comments` opt-out)
@@ -55,6 +56,7 @@ The gist is a **read replica** of the local clone. `push`/`pull` operations sync
     ├── api.py          # GitHub API helpers
     ├── gist.py         # Gist operations
     ├── comments.py     # Comment file read/write
+    ├── reviews.py      # Review-thread (inline comment) pull/push/diff + .thread.yml I/O
     ├── files.py        # Description file operations
     ├── config.py       # Git config helpers
     ├── patterns.py     # Regex patterns
@@ -68,6 +70,7 @@ The gist is a **read replica** of the local clone. `push`/`pull` operations sync
         ├── open.py
         ├── pull.py
         ├── push.py
+        ├── review.py         # `ghpr review reply|resolve|unresolve` (local edits)
         ├── shell_integration.py
         ├── show.py
         └── upload.py

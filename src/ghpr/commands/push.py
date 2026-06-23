@@ -306,7 +306,7 @@ def push(
                         unlink(temp_file)
 
             # Find all local comment files (z*.md)
-            comment_files = sorted(glob('z*.md'))
+            comment_files = sorted(glob('z[0-9]*.md'))
 
             if not comment_files:
                 err("No comment files found")
@@ -408,6 +408,16 @@ def push(
 
             proc.run('git', 'commit', '-m', commit_msg, log=False)
             err(f"Committed {len(new_comment_renames)} new comment(s)")
+
+    # Push review-thread changes (PR-only, default enabled, skip if --no-comments)
+    if not no_comments and item_type == 'pr':
+        from .. import reviews
+        current_user = get_current_github_user()
+        use_color = sys.stderr.isatty()
+        if dry_run:
+            reviews.diff(owner, repo, number, use_color=use_color, current_user=current_user)
+        else:
+            reviews.push(owner, repo, number, current_user=current_user, force_others=force_others)
 
 
 def sync_to_gist(

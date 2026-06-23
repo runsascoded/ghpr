@@ -120,6 +120,10 @@ def diff(
         current_user = get_current_github_user()
         render_comment_diff(owner, repo, pr_number, item_type, use_color=use_color, current_user=current_user)
 
+        if item_type == 'pr':
+            from .. import reviews
+            reviews.diff(owner, repo, pr_number, use_color=use_color, current_user=current_user)
+
 
 def register(cli):
     """Register command with CLI."""

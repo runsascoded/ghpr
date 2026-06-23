@@ -77,7 +77,7 @@ def pull(
 
         remote_comments = get_item_comments(owner, repo, pr_number, item_type)
         if remote_comments:
-            existing_files = glob('z*.md')
+            existing_files = glob('z[0-9]*.md')
             # Map comment ID to filename
             existing_id_to_file = {get_comment_id_from_filename(f): f for f in existing_files if get_comment_id_from_filename(f)}
 
@@ -121,8 +121,16 @@ def pull(
         else:
             err("No comments found remotely")
 
-    # Create single commit with all changes (description + comments)
-    if desc_changed or new_comments > 0 or updated_comments > 0:
+    # Sync review threads (PR-only, default enabled, skip if --no-comments)
+    review_threads = review_new = review_updated = 0
+    if not no_comments and item_type == 'pr':
+        from .. import reviews
+        err("Syncing review threads from remote...")
+        review_threads, review_new, review_updated = reviews.pull(owner, repo, pr_number, dry_run)
+
+    # Create single commit with all changes (description + comments + review threads)
+    review_changed = review_new > 0 or review_updated > 0
+    if desc_changed or new_comments > 0 or updated_comments > 0 or review_changed:
         if not dry_run:
             # Build commit message
             msg_parts = []
@@ -132,6 +140,9 @@ def pull(
                 msg_parts.append(f'{new_comments} new comment(s)')
             if updated_comments > 0:
                 msg_parts.append(f'{updated_comments} updated comment(s)')
+            if review_changed:
+                msg_parts.append(f'{review_threads} review thread(s), '
+                                 f'{review_new} new + {review_updated} updated review comment(s)')
 
             commit_msg = f'Pull from {item_label}: {", ".join(msg_parts)}'
             proc.run('git', 'commit', '-m', commit_msg, log=None)

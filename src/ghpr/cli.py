@@ -198,6 +198,7 @@ from .commands import pull as pull_cmd
 from .commands import clone as clone_cmd
 from .commands import create as create_cmd
 from .commands import push as push_cmd
+from .commands import review as review_cmd
 from .commands import ingest_attachments as ingest_attachments_cmd
 
 shell_integration_cmd.register(cli)
@@ -209,6 +210,7 @@ pull_cmd.register(cli)
 clone_cmd.register(cli)
 create_cmd.register(cli)
 push_cmd.register(cli)
+review_cmd.register(cli)
 ingest_attachments_cmd.register(cli)
 
 
