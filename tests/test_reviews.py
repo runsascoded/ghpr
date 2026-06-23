@@ -167,6 +167,7 @@ def _rest(id, in_reply_to, login, body, path='a.py', line=3, sha='sha1'):
         'side': 'RIGHT', 'start_line': None, 'start_side': None, 'commit_id': sha,
         'original_line': line, 'user': {'login': login}, 'body': body,
         'created_at': '2025-01-01T00:00:00Z', 'updated_at': '2025-01-01T00:00:00Z',
+        'html_url': f'https://github.com/o/r/pull/5#discussion_r{id}',
     }
 
 
@@ -270,6 +271,27 @@ class TestReviewCommands:
 def runner_invoke_exit(cli, args):
     from click.testing import CliRunner
     return CliRunner().invoke(cli, args).exit_code
+
+
+class TestDiffStatusLines:
+    def test_per_thread_status_in_sync_and_pending(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        make_head('100', resolved=True, node_id='PRRT_A', path='a.py', line=3, body='head body')
+        make_head('200', author='jder', resolved=False, node_id='PRRT_B', path='b.py', line=9, body='head body')
+        remote = [_rest(100, None, 'Copilot', 'head body', path='a.py', line=3),
+                  _rest(200, None, 'jder', 'head body', path='b.py', line=9)]
+        # PRRT_A resolved (== local) → in sync; PRRT_B resolved remotely but local open → pending unresolve
+        _mock_api(monkeypatch, remote, [_thread('PRRT_A', True, [100]), _thread('PRRT_B', True, [200])])
+
+        out = []
+        monkeypatch.setattr(reviews, 'err', lambda *a: out.append(' '.join(str(x) for x in a)))
+        reviews.diff('o', 'r', '5', use_color=False, current_user='ryan-williams')
+        lines = [l for l in out if l.startswith('Thread')]
+        assert lines == [
+            'Thread 100 (a.py:3) [resolved] https://github.com/o/r/pull/5#discussion_r100',
+            'Thread 200 (b.py:9) [open] → would unresolve on push (remote=resolved) '
+            'https://github.com/o/r/pull/5#discussion_r200',
+        ]
 
 
 class TestBaseline:

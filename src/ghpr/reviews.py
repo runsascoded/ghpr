@@ -493,6 +493,7 @@ def diff(
 
     YELLOW = '\033[33m' if use_color else ''
     GREEN = '\033[32m' if use_color else ''
+    CYAN = '\033[36m' if use_color else ''
     RESET = '\033[0m' if use_color else ''
     BOLD = '\033[1m' if use_color else ''
 
@@ -513,14 +514,19 @@ def diff(
         location = f"{head_fields.get('path')}:{line}"
 
         head_url = remote_by_id.get(head_id, {}).get('html_url')
-        if node_id:
-            remote_thread = threads_by_node.get(node_id)
-            remote_resolved = remote_thread['isResolved'] if remote_thread else None
-            local_resolved = bool(head_fields.get('resolved'))
-            if remote_resolved is not None and local_resolved != remote_resolved:
-                action = 'resolve' if local_resolved else 'unresolve'
-                err(f"{YELLOW}Thread {head_id} ({location}): would {action} "
-                    f"(remote={remote_resolved}, local={local_resolved}){RESET} {link(head_url, use_color)}")
+        local_resolved = bool(head_fields.get('resolved'))
+        remote_thread = threads_by_node.get(node_id) if node_id else None
+        remote_resolved = remote_thread['isResolved'] if remote_thread else None
+        # Always print a per-thread status line (resolved state + sync), so an
+        # in-sync thread or a redundant local toggle reads as recognized rather
+        # than silently absent.
+        status = 'resolved' if local_resolved else 'open'
+        if remote_resolved is not None and local_resolved != remote_resolved:
+            action = 'resolve' if local_resolved else 'unresolve'
+            err(f"{YELLOW}Thread {head_id} ({location}) [{status}] → would {action} on push "
+                f"(remote={'resolved' if remote_resolved else 'open'}){RESET} {link(head_url, use_color)}")
+        else:
+            err(f"{CYAN}Thread {head_id} ({location}) [{status}]{RESET} {link(head_url, use_color)}")
 
         for _seq, author, path in g['synced']:
             fields, body = parse_comment_file(path)
