@@ -23,7 +23,7 @@ The gist is a **read replica** of the local clone. `push`/`pull` operations sync
 ### Completed
 - ✅ Basic clone/push/pull/diff commands
 - ✅ Comment support (fetch, diff, push comments)
-- ✅ Review-thread sync (inline PR comments): pull threads to `gh/<num>/reviews/<head_id>/`, edit/reply/resolve locally, push back (REST + GraphQL); `ghpr review reply|resolve|unresolve`
+- ✅ Review-thread sync (inline PR comments): clone/pull threads to flat `gh/<num>/z-<head_id>-<NN>-<author>.md` files (head frontmatter holds thread metadata), edit/reply/resolve locally, push back (REST + GraphQL); `ghpr review reply|resolve|unresolve`
 - ✅ Gist mirroring
 - ✅ Issue and PR support
 - ✅ Comments default enabled (with `--no-comments` opt-out)

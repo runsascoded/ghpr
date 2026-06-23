@@ -269,7 +269,23 @@ def clone(
                     proc.run('git', 'push', gist_remote, 'main', '--force', log=None)
                     err("Pushed comments to gist")
         else:
-            err("No comments found")
+            # Inline review threads (if any) are fetched separately, just below.
+            err("No top-level comments found" if detected_type == 'pr' else "No comments found")
+
+    # Fetch review threads (PRs only)
+    if not no_comments and detected_type == 'pr':
+        from .. import reviews
+        err("Fetching review threads...")
+        n_threads, r_new, r_updated = reviews.pull(owner, repo, str(number))
+        if r_new or r_updated:
+            proc.run('git', 'commit', '-m',
+                     f'Add {n_threads} review thread(s), {r_new} comment(s)', log=None)
+            err(f"Committed {n_threads} review thread(s)")
+            if gist_url:
+                gist_remote = find_gist_remote()
+                if gist_remote:
+                    proc.run('git', 'push', gist_remote, 'main', '--force', log=None)
+                    err("Pushed review threads to gist")
 
     # Check if we should ingest user-attachments
     should_ingest = environ.get('GHPR_INGEST_ATTACHMENTS', '1') != '0'
