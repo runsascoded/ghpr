@@ -9,6 +9,15 @@ from .api import get_item_comments
 from .comments import read_comment_file, get_comment_id_from_filename
 
 
+def link(url: str | None, use_color: bool = True) -> str:
+    """Render a URL for terminal display (plain — terminals linkify it)."""
+    if not url:
+        return ''
+    CYAN = '\033[36m' if use_color else ''
+    RESET = '\033[0m' if use_color else ''
+    return f'{CYAN}{url}{RESET}'
+
+
 def render_comment_diff(
     owner: str,
     repo: str,
@@ -90,7 +99,7 @@ def render_comment_diff(
                     if is_others:
                         others_with_diffs.append(comment_file_path)
                     changes_count += 1
-                    err(f"\n{BOLD}{YELLOW}Comment {comment_id} (by {author}) - Differences:{RESET}")
+                    err(f"\n{BOLD}{YELLOW}Comment {comment_id} (by {author}) - Differences:{RESET} {link(comment_url, use_color)}")
                     if is_others:
                         err(f"{YELLOW}  ⚠ Not your comment; won't be pushed without `-C`{RESET}")
                     render_unified_diff(
@@ -102,7 +111,7 @@ def render_comment_diff(
                         log=print
                     )
                 else:
-                    err(f"{CYAN}Comment {comment_id} (by {author}): No differences{RESET}")
+                    err(f"{CYAN}Comment {comment_id} (by {author}): No differences{RESET} {link(comment_url, use_color)}")
             else:
                 err(f"{YELLOW}Comment {comment_id} exists locally but not remotely{RESET}")
 

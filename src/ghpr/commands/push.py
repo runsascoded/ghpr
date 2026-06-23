@@ -508,14 +508,12 @@ def sync_to_gist(
 
         # Check if remote exists and push to it
         if add_remote:
-            try:
-                # Commit any changes and push to gist
-                proc.run('git', 'add', local_filename, log=None)
-                proc.run('git', 'commit', '-m', f'Update PR description for {owner}/{repo}#{pr_number}', log=None)
-            except Exception:
-                # May already be committed - check if there are changes
-                if proc.line('git', 'diff', '--cached', '--name-only', local_filename, err_ok=True, log=None):
-                    raise  # Re-raise if there were actual changes that failed to commit
+            # Commit the description only when it actually changed; committing
+            # unconditionally dumps git's "nothing to commit / Untracked files"
+            # status block into push output (cosmetic noise).
+            proc.run('git', 'add', local_filename, log=None)
+            if not proc.check('git', 'diff', '--cached', '--quiet', log=None):
+                proc.run('git', 'commit', '-q', '-m', f'Update PR description for {owner}/{repo}#{pr_number}', log=None)
 
             try:
                 proc.run('git', 'push', gist_remote, 'main', '--force', log=None)

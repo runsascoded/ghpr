@@ -38,7 +38,7 @@ from .api import (
     resolve_review_thread,
     unresolve_review_thread,
 )
-from .render import render_unified_diff
+from .render import render_unified_diff, link
 
 
 # z-<head_id>-<NN>-<author>.md  (synced head/reply)
@@ -512,6 +512,7 @@ def diff(
             line = head_fields.get('original_line')
         location = f"{head_fields.get('path')}:{line}"
 
+        head_url = remote_by_id.get(head_id, {}).get('html_url')
         if node_id:
             remote_thread = threads_by_node.get(node_id)
             remote_resolved = remote_thread['isResolved'] if remote_thread else None
@@ -519,7 +520,7 @@ def diff(
             if remote_resolved is not None and local_resolved != remote_resolved:
                 action = 'resolve' if local_resolved else 'unresolve'
                 err(f"{YELLOW}Thread {head_id} ({location}): would {action} "
-                    f"(remote={remote_resolved}, local={local_resolved}){RESET}")
+                    f"(remote={remote_resolved}, local={local_resolved}){RESET} {link(head_url, use_color)}")
 
         for _seq, author, path in g['synced']:
             fields, body = parse_comment_file(path)
@@ -528,20 +529,22 @@ def diff(
                 err(f"{YELLOW}Comment {cid} ({location}) exists locally but not remotely{RESET}")
                 continue
             remote_body = remote_by_id[cid].get('body', '')
+            comment_url = remote_by_id[cid].get('html_url')
             if body != remote_body:
                 is_others = current_user and author != current_user
                 err(f"\n{BOLD}{YELLOW}Review comment {cid} (by {author}, "
-                    f"{location}) - Differences:{RESET}")
+                    f"{location}) - Differences:{RESET} {link(comment_url, use_color)}")
                 if is_others:
                     err(f"{YELLOW}  ⚠ Not your comment; won't be pushed without `-C`{RESET}")
                 render_unified_diff(
                     remote_body, body,
-                    fromfile=remote_by_id[cid].get('html_url', f'Comment {cid}'),
+                    fromfile=comment_url or f'Comment {cid}',
                     tofile=str(path), use_color=use_color, log=print,
                 )
 
         for draft in sorted(g['drafts']):
-            err(f"\n{BOLD}New reply to thread {head_id} ({location}) from {draft.name}:{RESET}")
+            err(f"\n{BOLD}New reply to thread {head_id} ({location}) from {draft.name}:{RESET} "
+                f"{link(head_url, use_color)}")
             preview = '\n'.join(draft.read_text().strip().split('\n')[:10])
             err(f"{GREEN}{preview}{RESET}")
 
